@@ -124,6 +124,7 @@ pub fn api_router() -> Router<Arc<AppState>> {
         .route("/api/v1/proxy/all", get(get_all_proxies))
         .route("/api/v1/proxy/json", get(get_proxies_json))
         .route("/api/v1/proxy/txt", get(get_proxies_txt))
+        .route("/api/v1/proxy/csv", get(get_proxies_csv))
         .route("/api/v1/proxy/stats", get(get_stats))
         .route("/api/v1/health", get(health_check))
         // Admin API — Proxy management
@@ -289,6 +290,40 @@ async fn get_proxies_txt(
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             [("content-type", "text/plain; charset=utf-8")],
+            format!("Error: {}", e),
+        ),
+    }
+}
+
+/// GET /api/v1/proxy/csv?sort=score&limit=10 — CSV export of alive proxies
+async fn get_proxies_csv(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<ExportParams>,
+) -> impl IntoResponse {
+    let sort = params.sort.as_deref().unwrap_or("score");
+    let limit = params.limit.map(|l| l.max(1));
+
+    match state.db.get_proxies_sorted(sort, limit).await {
+        Ok(proxies) => {
+            let mut csv = String::from("ip,port,protocol,country,score,latency_ms,success_count,fail_count,success_rate\n");
+            for p in &proxies {
+                let total = p.success_count + p.fail_count;
+                let rate = if total > 0 { (p.success_count as f64 / total as f64) * 100.0 } else { 0.0 };
+                csv.push_str(&format!(
+                    "{},{},{},{},{:.1},{:.0},{},{},{:.1}\n",
+                    p.ip, p.port, p.protocol, p.country, p.score, p.avg_latency_ms,
+                    p.success_count, p.fail_count, rate
+                ));
+            }
+            (
+                StatusCode::OK,
+                [("content-type", "text/csv; charset=utf-8")],
+                csv,
+            )
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            [("content-type", "text/csv; charset=utf-8")],
             format!("Error: {}", e),
         ),
     }

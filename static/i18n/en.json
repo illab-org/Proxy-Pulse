@@ -41,6 +41,8 @@
         "api_sort": "Sort",
         "api_sort_score": "Score",
         "api_sort_latency": "Latency",
+        "api_sort_success_rate": "Rate",
+        "api_sort_success_count": "Count",
         "api_limit_all": "ALL",
         "top_proxies": "Top Proxies",
         "th_proxy": "Proxy",

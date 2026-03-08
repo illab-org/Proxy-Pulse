@@ -41,6 +41,8 @@
         "api_sort": "並替",
         "api_sort_score": "スコア",
         "api_sort_latency": "遅延",
+        "api_sort_success_rate": "成功率",
+        "api_sort_success_count": "成功数",
         "api_limit_all": "全件",
         "top_proxies": "トッププロキシ",
         "th_proxy": "プロキシ",

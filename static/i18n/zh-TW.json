@@ -41,6 +41,8 @@
         "api_sort": "排序",
         "api_sort_score": "評分",
         "api_sort_latency": "延遲",
+        "api_sort_success_rate": "成功率",
+        "api_sort_success_count": "成功數",
         "api_limit_all": "全部",
         "top_proxies": "最優代理",
         "th_proxy": "代理",

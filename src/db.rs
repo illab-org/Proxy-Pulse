@@ -393,6 +393,8 @@ impl Database {
     pub async fn get_proxies_sorted(&self, sort: &str, limit: Option<i64>) -> Result<Vec<Proxy>> {
         let order_clause = match sort {
             "latency" => "avg_latency_ms ASC",
+            "success_rate" => "CAST(success_count AS REAL) / MAX(success_count + fail_count, 1) DESC",
+            "success_count" => "success_count DESC",
             _ => "score DESC",
         };
 
