@@ -12,35 +12,108 @@ pub async fn start_schedulers(db: Database, config: Arc<AppConfig>) {
     let db_source = db.clone();
     let config_source = config.clone();
 
-    // Source sync scheduler
+    // Subscription auto-sync scheduler (FIRST PRIORITY — runs every 60s, checks per-source intervals)
     tokio::spawn(async move {
-        let interval_secs = config_source.sources.sync_interval_secs;
-        info!(interval_secs = interval_secs, "Starting source sync scheduler");
+        info!("Starting subscription auto-sync scheduler (per-source intervals)");
 
-        // Run immediately on startup
-        match sources::sync_sources(&db_source, &config_source.sources.providers).await {
-            Ok(count) => info!(count = count, "Initial source sync complete"),
-            Err(e) => error!(error = %e, "Initial source sync failed"),
-        }
-        // Also sync subscription sources from DB
+        // Run all enabled subscriptions immediately on startup
         match sources::sync_subscription_sources(&db_source).await {
-            Ok(count) => info!(count = count, "Initial subscription sync complete"),
+            Ok(count) => {
+                info!(count = count, "Initial subscription sync complete");
+                if count > 0 {
+                    let db2 = db_source.clone();
+                    let cfg2 = config_source.clone();
+                    tokio::spawn(async move {
+                        match checker::run_check_cycle(&db2, &cfg2.checker, &cfg2.scoring).await {
+                            Ok((s, f)) => info!(success = s, fail = f, "Post-sync check cycle complete"),
+                            Err(e) => error!(error = %e, "Post-sync check cycle failed"),
+                        }
+                    });
+                }
+            }
             Err(e) => error!(error = %e, "Initial subscription sync failed"),
         }
 
-        let mut ticker = interval(Duration::from_secs(interval_secs));
-        ticker.tick().await; // Skip immediate tick (already ran)
+        // Check every 60 seconds which sources are due for sync
+        let mut ticker = interval(Duration::from_secs(60));
+        ticker.tick().await; // Skip immediate tick (already ran above)
 
         loop {
             ticker.tick().await;
-            match sources::sync_sources(&db_source, &config_source.sources.providers).await {
-                Ok(count) => info!(count = count, "Source sync complete"),
-                Err(e) => error!(error = %e, "Source sync failed"),
+
+            // Get sources that are due for sync based on their individual intervals
+            match db_source.get_sources_due_for_sync().await {
+                Ok(due_sources) if !due_sources.is_empty() => {
+                    info!(count = due_sources.len(), "Subscription sources due for auto-sync");
+                    let mut synced_total = 0usize;
+                    for source in &due_sources {
+                        match sources::sync_single_subscription(&db_source, source).await {
+                            Ok(count) => {
+                                let _ = db_source.update_subscription_sync_result(
+                                    source.id, count as i64, None,
+                                ).await;
+                                info!(
+                                    source_id = source.id,
+                                    name = %source.name,
+                                    count = count,
+                                    interval_secs = source.sync_interval_secs,
+                                    "Subscription auto-synced"
+                                );
+                                synced_total += count;
+                            }
+                            Err(e) => {
+                                let _ = db_source.update_subscription_sync_result(
+                                    source.id, 0, Some(&e.to_string()),
+                                ).await;
+                                error!(
+                                    source_id = source.id,
+                                    name = %source.name,
+                                    error = %e,
+                                    "Subscription auto-sync failed"
+                                );
+                            }
+                        }
+                    }
+                    // Trigger immediate check after syncing new proxies
+                    if synced_total > 0 {
+                        let db2 = db_source.clone();
+                        let cfg2 = config_source.clone();
+                        tokio::spawn(async move {
+                            match checker::run_check_cycle(&db2, &cfg2.checker, &cfg2.scoring).await {
+                                Ok((s, f)) => info!(success = s, fail = f, "Post-autosync check complete"),
+                                Err(e) => error!(error = %e, "Post-autosync check failed"),
+                            }
+                        });
+                    }
+                }
+                Ok(_) => {} // No sources due
+                Err(e) => error!(error = %e, "Failed to query sources due for sync"),
             }
-            // Sync subscription sources each cycle
-            match sources::sync_subscription_sources(&db_source).await {
-                Ok(count) => info!(count = count, "Subscription sync complete"),
-                Err(e) => error!(error = %e, "Subscription sync failed"),
+        }
+    });
+
+    let db_provider = db.clone();
+    let config_provider = config.clone();
+
+    // Provider source sync scheduler (config-based sources, lower priority)
+    tokio::spawn(async move {
+        let interval_secs = config_provider.sources.sync_interval_secs;
+        info!(interval_secs = interval_secs, "Starting provider source sync scheduler");
+
+        // Run immediately on startup
+        match sources::sync_sources(&db_provider, &config_provider.sources.providers).await {
+            Ok(count) => info!(count = count, "Initial provider source sync complete"),
+            Err(e) => error!(error = %e, "Initial provider source sync failed"),
+        }
+
+        let mut ticker = interval(Duration::from_secs(interval_secs));
+        ticker.tick().await; // Skip immediate tick
+
+        loop {
+            ticker.tick().await;
+            match sources::sync_sources(&db_provider, &config_provider.sources.providers).await {
+                Ok(count) => info!(count = count, "Provider source sync complete"),
+                Err(e) => error!(error = %e, "Provider source sync failed"),
             }
         }
     });

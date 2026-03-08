@@ -111,6 +111,7 @@ impl Database {
                 content TEXT,
                 protocol_hint TEXT NOT NULL DEFAULT 'auto',
                 is_enabled INTEGER NOT NULL DEFAULT 1,
+                sync_interval_secs INTEGER NOT NULL DEFAULT 21600,
                 proxy_count INTEGER NOT NULL DEFAULT 0,
                 last_sync_at TEXT,
                 last_error TEXT,
@@ -121,6 +122,13 @@ impl Database {
         )
         .execute(&self.pool)
         .await?;
+
+        // Migration: add sync_interval_secs column if it doesn't exist
+        let _ = sqlx::query(
+            "ALTER TABLE subscription_sources ADD COLUMN sync_interval_secs INTEGER NOT NULL DEFAULT 21600",
+        )
+        .execute(&self.pool)
+        .await;
 
         Ok(())
     }
@@ -660,11 +668,12 @@ impl Database {
         url: Option<&str>,
         content: Option<&str>,
         protocol_hint: &str,
+        sync_interval_secs: i64,
     ) -> Result<i64> {
         let result = sqlx::query(
             r#"
-            INSERT INTO subscription_sources (name, source_type, url, content, protocol_hint, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            INSERT INTO subscription_sources (name, source_type, url, content, protocol_hint, sync_interval_secs, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
             RETURNING id
             "#,
         )
@@ -673,6 +682,7 @@ impl Database {
         .bind(url)
         .bind(content)
         .bind(protocol_hint)
+        .bind(sync_interval_secs)
         .fetch_one(&self.pool)
         .await?;
 
@@ -684,7 +694,7 @@ impl Database {
         let source = sqlx::query_as::<_, SubscriptionSource>(
             r#"
             SELECT id, name, source_type, url, content, protocol_hint, is_enabled,
-                   proxy_count, last_sync_at, last_error, created_at, updated_at
+                   sync_interval_secs, proxy_count, last_sync_at, last_error, created_at, updated_at
             FROM subscription_sources
             WHERE id = ?
             "#,
@@ -700,7 +710,7 @@ impl Database {
         let sources = sqlx::query_as::<_, SubscriptionSource>(
             r#"
             SELECT id, name, source_type, url, content, protocol_hint, is_enabled,
-                   proxy_count, last_sync_at, last_error, created_at, updated_at
+                   sync_interval_secs, proxy_count, last_sync_at, last_error, created_at, updated_at
             FROM subscription_sources
             ORDER BY created_at DESC
             "#,
@@ -715,7 +725,7 @@ impl Database {
         let sources = sqlx::query_as::<_, SubscriptionSource>(
             r#"
             SELECT id, name, source_type, url, content, protocol_hint, is_enabled,
-                   proxy_count, last_sync_at, last_error, created_at, updated_at
+                   sync_interval_secs, proxy_count, last_sync_at, last_error, created_at, updated_at
             FROM subscription_sources
             WHERE is_enabled = 1
             "#,
@@ -732,6 +742,24 @@ impl Database {
             .execute(&self.pool)
             .await?;
         Ok(result.rows_affected() > 0)
+    }
+
+    /// Get enabled subscription sources that are due for sync based on their individual intervals
+    pub async fn get_sources_due_for_sync(&self) -> Result<Vec<SubscriptionSource>> {
+        let sources = sqlx::query_as::<_, SubscriptionSource>(
+            r#"
+            SELECT id, name, source_type, url, content, protocol_hint, is_enabled,
+                   sync_interval_secs, proxy_count, last_sync_at, last_error, created_at, updated_at
+            FROM subscription_sources
+            WHERE is_enabled = 1
+              AND (last_sync_at IS NULL
+                   OR datetime(last_sync_at, '+' || sync_interval_secs || ' seconds') <= datetime('now'))
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(sources)
     }
 
     pub async fn toggle_subscription_source(&self, id: i64, enabled: bool) -> Result<bool> {

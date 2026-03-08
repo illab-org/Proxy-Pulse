@@ -640,7 +640,22 @@
                             </select>
                             <p class="form-hint" data-i18n="admin.protocol_hint">Override the protocol for all proxies in this source, or use auto to keep the parsed protocol</p>
                         </div>
-                        <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:26px;">
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.sync_interval">Auto Sync Interval</label>
+                            <select class="form-select" id="sourceSyncInterval">
+                                <option value="300">5 min</option>
+                                <option value="600">10 min</option>
+                                <option value="1800">30 min</option>
+                                <option value="3600">1 h</option>
+                                <option value="10800">3 h</option>
+                                <option value="21600" selected>6 h</option>
+                                <option value="86400">24 h</option>
+                            </select>
+                            <p class="form-hint" data-i18n="admin.sync_interval_hint">How often this source is automatically synced</p>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:2px;">
                             <button type="submit" class="btn btn-primary">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
                                     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -677,6 +692,7 @@
                                 <th data-i18n="admin.th_url_content">URL / Content</th>
                                 <th data-i18n="admin.th_protocol">Protocol</th>
                                 <th data-i18n="admin.th_proxies">Proxies</th>
+                                <th data-i18n="admin.th_interval">Interval</th>
                                 <th data-i18n="admin.th_enabled">Enabled</th>
                                 <th data-i18n="admin.th_last_sync">Last Sync</th>
                                 <th data-i18n="admin.th_error">Error</th>
@@ -684,7 +700,7 @@
                             </tr>
                         </thead>
                         <tbody id="sourceTableBody">
-                            <tr><td colspan="9"><div class="loading-overlay"><span class="spinner"></span> <span data-i18n="admin.loading_sources">Loading sources...</span></div></td></tr>
+                            <tr><td colspan="10"><div class="loading-overlay"><span class="spinner"></span> <span data-i18n="admin.loading_sources">Loading sources...</span></div></td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -937,7 +953,7 @@
 
     async function loadSources() {
         const tbody = document.getElementById('sourceTableBody');
-        tbody.innerHTML = '<tr><td colspan="9"><div class="loading-overlay"><span class="spinner"></span> Loading...</div></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10"><div class="loading-overlay"><span class="spinner"></span> Loading...</div></td></tr>';
 
         try {
             const resp = await fetch(`${API}/source/list`);
@@ -946,7 +962,7 @@
 
             const sources = json.data;
             if (sources.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><p>No subscription sources configured. Add one above!</p></div></td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><p>No subscription sources configured. Add one above!</p></div></td></tr>';
                 return;
             }
 
@@ -958,6 +974,7 @@
                         title="${escHtml(s.url || 'Inline text content')}">${escHtml(s.url || '(inline text)')}</td>
                     <td><span class="badge badge-protocol">${s.protocol_hint.toUpperCase()}</span></td>
                     <td style="font-weight:600;color:var(--accent-cyan);">${s.proxy_count}</td>
+                    <td style="font-size:0.78rem;white-space:nowrap;">${formatInterval(s.sync_interval_secs)}</td>
                     <td>
                         <label class="toggle">
                             <input type="checkbox" ${s.is_enabled ? 'checked' : ''} onchange="toggleSource(${s.id}, this.checked)">
@@ -979,7 +996,7 @@
             `).join('');
 
         } catch(e) {
-            tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><p style="color:var(--accent-red)">Error: ${escHtml(e.message)}</p></div></td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><p style="color:var(--accent-red)">Error: ${escHtml(e.message)}</p></div></td></tr>`;
         }
     }
 
@@ -990,8 +1007,9 @@
         const url = document.getElementById('sourceUrl').value.trim();
         const content = document.getElementById('sourceContent').value.trim();
         const protocol = document.getElementById('sourceProtocol').value;
+        const syncInterval = parseInt(document.getElementById('sourceSyncInterval').value, 10);
 
-        const body = { name, source_type: type, protocol_hint: protocol };
+        const body = { name, source_type: type, protocol_hint: protocol, sync_interval_secs: syncInterval };
         if (type === 'url') body.url = url;
         if (type === 'text') body.content = content;
 
@@ -1114,6 +1132,15 @@
         const div = document.createElement('div');
         div.textContent = str;
         return div.innerHTML;
+    }
+
+    // ─── Interval Formatter ───
+    function formatInterval(secs) {
+        if (!secs) return '—';
+        if (secs >= 86400) return (secs / 86400) + ' d';
+        if (secs >= 3600) return (secs / 3600) + ' h';
+        if (secs >= 60) return (secs / 60) + ' min';
+        return secs + ' s';
     }
 
     // ─── Initialize ───

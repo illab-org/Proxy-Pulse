@@ -118,6 +118,7 @@ pub struct SubscriptionSource {
     pub content: Option<String>,     // raw text content for "text" type
     pub protocol_hint: String,       // "auto", "http", "socks4", "socks5"
     pub is_enabled: bool,
+    pub sync_interval_secs: i64,
     pub proxy_count: i64,
     pub last_sync_at: Option<NaiveDateTime>,
     pub last_error: Option<String>,
@@ -133,6 +134,7 @@ pub struct SubscriptionSourceResponse {
     pub url: Option<String>,
     pub protocol_hint: String,
     pub is_enabled: bool,
+    pub sync_interval_secs: i64,
     pub proxy_count: i64,
     pub last_sync_at: Option<String>,
     pub last_error: Option<String>,
@@ -148,6 +150,7 @@ impl From<SubscriptionSource> for SubscriptionSourceResponse {
             url: s.url,
             protocol_hint: s.protocol_hint,
             is_enabled: s.is_enabled,
+            sync_interval_secs: s.sync_interval_secs,
             proxy_count: s.proxy_count,
             last_sync_at: s.last_sync_at.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()),
             last_error: s.last_error,

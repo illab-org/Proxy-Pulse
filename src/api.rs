@@ -91,6 +91,7 @@ pub struct AddSourceRequest {
     pub url: Option<String>,
     pub content: Option<String>,
     pub protocol_hint: Option<String>,
+    pub sync_interval_secs: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -494,6 +495,7 @@ async fn admin_add_source(
     Json(body): Json<AddSourceRequest>,
 ) -> Result<Json<ApiResponse<AddSourceResult>>, (StatusCode, Json<ErrorResponse>)> {
     let protocol_hint = body.protocol_hint.as_deref().unwrap_or("auto");
+    let sync_interval_secs = body.sync_interval_secs.unwrap_or(21600); // default 6 hours
 
     let id = match state
         .db
@@ -503,6 +505,7 @@ async fn admin_add_source(
             body.url.as_deref(),
             body.content.as_deref(),
             protocol_hint,
+            sync_interval_secs,
         )
         .await
     {
