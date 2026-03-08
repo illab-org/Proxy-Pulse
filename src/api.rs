@@ -31,6 +31,12 @@ pub struct TopParams {
     pub limit: Option<i64>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ExportParams {
+    pub sort: Option<String>,
+    pub limit: Option<i64>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ApiResponse<T: Serialize> {
     pub success: bool,
@@ -116,6 +122,7 @@ pub fn api_router() -> Router<Arc<AppState>> {
         .route("/api/v1/proxy/top", get(get_top_proxies))
         .route("/api/v1/proxy/country/:country", get(get_proxies_by_country))
         .route("/api/v1/proxy/all", get(get_all_proxies))
+        .route("/api/v1/proxy/json", get(get_proxies_json))
         .route("/api/v1/proxy/txt", get(get_proxies_txt))
         .route("/api/v1/proxy/stats", get(get_stats))
         .route("/api/v1/health", get(health_check))
@@ -231,13 +238,42 @@ async fn get_all_proxies(
     }
 }
 
-/// GET /api/v1/proxy/txt — Plain text list of alive proxies (one per line)
+/// GET /api/v1/proxy/json?sort=score&limit=10 — JSON list of alive proxies
+async fn get_proxies_json(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<ExportParams>,
+) -> Result<Json<ApiResponse<ProxyListResponse>>, (StatusCode, Json<ErrorResponse>)> {
+    let sort = params.sort.as_deref().unwrap_or("score");
+    let limit = params.limit.map(|l| l.max(1));
+
+    match state.db.get_proxies_sorted(sort, limit).await {
+        Ok(proxies) => {
+            let count = proxies.len();
+            let proxies: Vec<ProxyResponse> = proxies.into_iter().map(ProxyResponse::from).collect();
+            Ok(Json(ApiResponse {
+                success: true,
+                data: ProxyListResponse { proxies, count },
+            }))
+        }
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                success: false,
+                error: e.to_string(),
+            }),
+        )),
+    }
+}
+
+/// GET /api/v1/proxy/txt?sort=score&limit=10 — Plain text list of alive proxies (one per line)
 async fn get_proxies_txt(
     State(state): State<Arc<AppState>>,
-    Query(params): Query<TopParams>,
+    Query(params): Query<ExportParams>,
 ) -> impl IntoResponse {
-    let limit = params.limit.unwrap_or(200).min(1000);
-    match state.db.get_top_proxies(limit).await {
+    let sort = params.sort.as_deref().unwrap_or("score");
+    let limit = params.limit.map(|l| l.max(1));
+
+    match state.db.get_proxies_sorted(sort, limit).await {
         Ok(proxies) => {
             let txt: String = proxies
                 .iter()

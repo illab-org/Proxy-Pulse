@@ -247,10 +247,9 @@ async fn detect_and_update_metadata(db: &Database, proxy: &Proxy) -> Result<()> 
     let protocol = detect_protocol(&proxy.ip, proxy.port).await
         .unwrap_or_else(|_| proxy.protocol.clone());
 
-    // Country detection — we use the IP itself
-    // In production, you'd use a GeoIP database. For now, keep existing or set unknown.
+    // Country detection — use the proxy's IP directly with a GeoIP API
     let country = if proxy.country == "unknown" {
-        detect_country(&proxy_addr, &protocol).await
+        detect_country_by_ip(&proxy.ip).await
             .unwrap_or_else(|_| "unknown".to_string())
     } else {
         proxy.country.clone()
@@ -324,29 +323,60 @@ async fn detect_protocol(ip: &str, port: u16) -> Result<String> {
     Ok("http".to_string())
 }
 
-async fn detect_country(proxy_addr: &str, protocol: &str) -> Result<String> {
-    let proxy_url = format!("{}://{}", protocol, proxy_addr);
-    let proxy = reqwest::Proxy::all(&proxy_url)?;
-
+/// Detect country from the proxy's IP address using free GeoIP APIs (direct, not through proxy)
+async fn detect_country_by_ip(ip: &str) -> Result<String> {
     let client = reqwest::Client::builder()
-        .proxy(proxy)
-        .timeout(std::time::Duration::from_secs(10))
-        .danger_accept_invalid_certs(true)
+        .timeout(std::time::Duration::from_secs(8))
         .build()?;
 
-    let resp = client
-        .get("https://httpbin.org/ip")
+    // Try ip-api.com first (free, no key required, 45 req/min)
+    if let Ok(resp) = client
+        .get(&format!("http://ip-api.com/json/{}?fields=status,countryCode", ip))
         .send()
-        .await?
-        .json::<serde_json::Value>()
-        .await?;
-
-    // httpbin returns {"origin": "ip"} — can't get country from this alone
-    // For production, use a GeoIP API or database
-    if resp.get("origin").is_some() {
-        // Could query a GeoIP service here
-        Ok("unknown".to_string())
-    } else {
-        Ok("unknown".to_string())
+        .await
+    {
+        if let Ok(json) = resp.json::<serde_json::Value>().await {
+            if json.get("status").and_then(|s| s.as_str()) == Some("success") {
+                if let Some(cc) = json.get("countryCode").and_then(|c| c.as_str()) {
+                    if !cc.is_empty() {
+                        return Ok(cc.to_lowercase());
+                    }
+                }
+            }
+        }
     }
+
+    // Fallback: ipinfo.io (free tier, 50k/month)
+    if let Ok(resp) = client
+        .get(&format!("https://ipinfo.io/{}/json", ip))
+        .send()
+        .await
+    {
+        if let Ok(json) = resp.json::<serde_json::Value>().await {
+            if let Some(cc) = json.get("country").and_then(|c| c.as_str()) {
+                if !cc.is_empty() {
+                    return Ok(cc.to_lowercase());
+                }
+            }
+        }
+    }
+
+    // Fallback: ipwho.is (free, unlimited)
+    if let Ok(resp) = client
+        .get(&format!("https://ipwho.is/{}", ip))
+        .send()
+        .await
+    {
+        if let Ok(json) = resp.json::<serde_json::Value>().await {
+            if json.get("success").and_then(|s| s.as_bool()) == Some(true) {
+                if let Some(cc) = json.get("country_code").and_then(|c| c.as_str()) {
+                    if !cc.is_empty() {
+                        return Ok(cc.to_lowercase());
+                    }
+                }
+            }
+        }
+    }
+
+    Ok("unknown".to_string())
 }

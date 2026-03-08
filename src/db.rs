@@ -389,6 +389,45 @@ impl Database {
         Ok(proxies)
     }
 
+    /// Get alive proxies sorted by score or latency, with optional limit
+    pub async fn get_proxies_sorted(&self, sort: &str, limit: Option<i64>) -> Result<Vec<Proxy>> {
+        let order_clause = match sort {
+            "latency" => "avg_latency_ms ASC",
+            _ => "score DESC",
+        };
+
+        let sql = if let Some(lim) = limit {
+            format!(
+                r#"SELECT id, ip, port, protocol, anonymity, country, score,
+                       is_alive, success_count, fail_count, consecutive_fails,
+                       avg_latency_ms, last_check_at, last_success_at, next_check_at,
+                       created_at, updated_at, source
+                FROM proxies
+                WHERE is_alive = 1
+                ORDER BY {}
+                LIMIT {}"#,
+                order_clause, lim
+            )
+        } else {
+            format!(
+                r#"SELECT id, ip, port, protocol, anonymity, country, score,
+                       is_alive, success_count, fail_count, consecutive_fails,
+                       avg_latency_ms, last_check_at, last_success_at, next_check_at,
+                       created_at, updated_at, source
+                FROM proxies
+                WHERE is_alive = 1
+                ORDER BY {}"#,
+                order_clause
+            )
+        };
+
+        let proxies = sqlx::query_as::<_, Proxy>(&sql)
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(proxies)
+    }
+
     pub async fn get_stats(&self) -> Result<ProxyStats> {
         // Total & alive counts
         let total: (i64,) =

@@ -1,0 +1,26 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+database:
+  url: "sqlite://proxy_pulse.db?mode=rwc"
+
+sources:
+  sync_interval_secs: 1800
+  providers:
+    - type: file
+      path: ./proxies.txt
+
+checker:
+  interval_secs: 300
+  timeout_secs: 10
+  max_concurrent: 50
+  targets:
+    - https://httpbin.org/ip
+    - https://www.cloudflare.com/cdn-cgi/trace
+
+scoring:
+  min_score: 60
+  weight_success_rate: 0.4
+  weight_latency: 0.35
+  weight_stability: 0.25

@@ -32,10 +32,19 @@ pub struct ProxyResponse {
     pub score: f64,
     pub latency_ms: f64,
     pub is_alive: bool,
+    pub success_count: i64,
+    pub fail_count: i64,
+    pub success_rate: f64,
 }
 
 impl From<Proxy> for ProxyResponse {
     fn from(p: Proxy) -> Self {
+        let total = p.success_count + p.fail_count;
+        let success_rate = if total > 0 {
+            (p.success_count as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
         Self {
             proxy: format!("{}:{}", p.ip, p.port),
             protocol: p.protocol,
@@ -44,6 +53,9 @@ impl From<Proxy> for ProxyResponse {
             score: p.score,
             latency_ms: p.avg_latency_ms,
             is_alive: p.is_alive,
+            success_count: p.success_count,
+            fail_count: p.fail_count,
+            success_rate,
         }
     }
 }

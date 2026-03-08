@@ -159,36 +159,34 @@
                     <span class="chart-badge" data-i18n="dashboard.badge_export">Export</span>
                 </div>
                 <div style="padding: 16px 20px;">
-                    <p style="color:var(--text-secondary);font-size:0.82rem;margin-bottom:16px;" data-i18n="dashboard.api_desc">Get alive proxies via direct API links. Click to copy.</p>
-                    <div style="display:flex;flex-direction:column;gap:10px;">
-                        <div class="api-link-row">
-                            <span class="api-link-label">JSON</span>
-                            <code class="api-link-url" id="apiJsonUrl">/api/v1/proxy/all?per_page=100</code>
-                            <button class="api-link-copy" onclick="copyApiLink('apiJsonUrl')" title="Copy">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
+                    <p style="color:var(--text-secondary);font-size:0.82rem;margin-bottom:14px;" data-i18n="dashboard.api_desc">Get alive proxies via direct API links. Click to copy.</p>
+                    <div class="api-toggle-group">
+                        <label class="api-toggle-label" data-i18n="dashboard.api_format">Format</label>
+                        <div class="api-toggle-btns" id="apiFormatBtns">
+                            <button class="api-toggle-btn active" data-value="json">JSON</button>
+                            <button class="api-toggle-btn" data-value="txt">TXT</button>
                         </div>
-                        <div class="api-link-row">
-                            <span class="api-link-label">Top 10</span>
-                            <code class="api-link-url" id="apiTopUrl">/api/v1/proxy/top?limit=10</code>
-                            <button class="api-link-copy" onclick="copyApiLink('apiTopUrl')" title="Copy">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
+                    </div>
+                    <div class="api-toggle-group">
+                        <label class="api-toggle-label" data-i18n="dashboard.api_sort">Sort</label>
+                        <div class="api-toggle-btns" id="apiSortBtns">
+                            <button class="api-toggle-btn active" data-value="score" data-i18n="dashboard.api_sort_score">Score</button>
+                            <button class="api-toggle-btn" data-value="latency" data-i18n="dashboard.api_sort_latency">Latency</button>
                         </div>
-                        <div class="api-link-row">
-                            <span class="api-link-label">Random</span>
-                            <code class="api-link-url" id="apiRandomUrl">/api/v1/proxy/random</code>
-                            <button class="api-link-copy" onclick="copyApiLink('apiRandomUrl')" title="Copy">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
+                    </div>
+                    <div class="api-toggle-group">
+                        <label class="api-toggle-label">Limit</label>
+                        <div class="api-toggle-btns" id="apiLimitBtns">
+                            <button class="api-toggle-btn active" data-value="10">10</button>
+                            <button class="api-toggle-btn" data-value="100">100</button>
+                            <button class="api-toggle-btn" data-value="all" data-i18n="dashboard.api_limit_all">ALL</button>
                         </div>
-                        <div class="api-link-row">
-                            <span class="api-link-label">TXT</span>
-                            <code class="api-link-url" id="apiTxtUrl">/api/v1/proxy/txt</code>
-                            <button class="api-link-copy" onclick="copyApiLink('apiTxtUrl')" title="Copy">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
-                        </div>
+                    </div>
+                    <div class="api-result-row" style="margin-top:14px;">
+                        <code class="api-link-url" id="apiResultUrl">/api/v1/proxy/json?sort=score&amp;limit=10</code>
+                        <button class="api-link-copy" id="apiCopyBtn" onclick="copyGeneratedApiLink()" title="Copy">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -247,12 +245,14 @@
                                 <th data-i18n="dashboard.th_country">Country</th>
                                 <th data-i18n="dashboard.th_score">Score</th>
                                 <th data-i18n="dashboard.th_latency">Latency</th>
+                                <th data-i18n="dashboard.th_success_rate">Success Rate</th>
+                                <th data-i18n="dashboard.th_success_count">Successes</th>
                                 <th data-i18n="dashboard.th_status">Status</th>
                             </tr>
                         </thead>
                         <tbody id="proxyTableBody">
                             <tr>
-                                <td colspan="6" class="table-empty" data-i18n="dashboard.loading_proxies">Loading proxies...</td>
+                                <td colspan="8" class="table-empty" data-i18n="dashboard.loading_proxies">Loading proxies...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -305,11 +305,11 @@
     I18N.onChange(updateLangUI);
 
     // ─── Copy API Link ───
-    function copyApiLink(id) {
-        const el = document.getElementById(id);
+    function copyGeneratedApiLink() {
+        const el = document.getElementById('apiResultUrl');
         const url = window.location.origin + el.textContent;
         navigator.clipboard.writeText(url).then(() => {
-            const btn = el.nextElementSibling;
+            const btn = document.getElementById('apiCopyBtn');
             btn.classList.add('copied');
             btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>';
             setTimeout(() => {
@@ -318,6 +318,38 @@
             }, 2000);
         });
     }
+
+    // ─── API Toggle Buttons ───
+    function initApiToggles() {
+        document.querySelectorAll('.api-toggle-btns').forEach(group => {
+            group.querySelectorAll('.api-toggle-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    group.querySelectorAll('.api-toggle-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    updateApiUrl();
+                });
+            });
+        });
+    }
+
+    function getToggleValue(groupId) {
+        const group = document.getElementById(groupId);
+        const active = group.querySelector('.api-toggle-btn.active');
+        return active ? active.dataset.value : '';
+    }
+
+    function updateApiUrl() {
+        const format = getToggleValue('apiFormatBtns');
+        const sort = getToggleValue('apiSortBtns');
+        const limit = getToggleValue('apiLimitBtns');
+        let url = `/api/v1/proxy/${format}?sort=${sort}`;
+        if (limit !== 'all') {
+            url += `&limit=${limit}`;
+        }
+        document.getElementById('apiResultUrl').textContent = url;
+    }
+
+    initApiToggles();
 
     // Init i18n then start app
     I18N.init().then(() => updateLangUI(I18N.locale));

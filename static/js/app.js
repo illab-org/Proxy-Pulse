@@ -316,7 +316,7 @@ function updateTable(proxies) {
 
     if (!proxies || proxies.length === 0) {
         tbody.innerHTML = `
-            <tr><td colspan="6" class="table-empty">
+            <tr><td colspan="8" class="table-empty">
                 ${I18N.t('dashboard.no_proxies')}
             </td></tr>
         `;
@@ -326,6 +326,9 @@ function updateTable(proxies) {
     tbody.innerHTML = proxies.map(p => {
         const scoreColor = getScoreColor(p.score);
         const protocolClass = `protocol-${p.protocol.toLowerCase()}`;
+        const successRate = p.success_rate !== undefined ? p.success_rate.toFixed(1) : '0.0';
+        const successCount = p.success_count !== undefined ? p.success_count : 0;
+        const rateColor = p.success_rate >= 80 ? COLORS.green : p.success_rate >= 50 ? COLORS.orange : COLORS.red;
 
         return `
             <tr>
@@ -341,6 +344,8 @@ function updateTable(proxies) {
                     </div>
                 </td>
                 <td><span class="latency-text">${p.latency_ms > 0 ? p.latency_ms.toFixed(0) + 'ms' : '—'}</span></td>
+                <td><span style="color:${rateColor};font-weight:500;font-size:0.82rem;">${successRate}%</span></td>
+                <td><span style="color:var(--text-secondary);font-size:0.82rem;">${successCount}</span></td>
                 <td>
                     <span class="status-badge ${p.is_alive ? 'status-alive' : 'status-dead'}">
                         <span class="status-badge-dot"></span>
