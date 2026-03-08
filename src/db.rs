@@ -639,6 +639,22 @@ impl Database {
         Ok(id)
     }
 
+    pub async fn get_subscription_source_by_id(&self, id: i64) -> Result<Option<SubscriptionSource>> {
+        let source = sqlx::query_as::<_, SubscriptionSource>(
+            r#"
+            SELECT id, name, source_type, url, content, protocol_hint, is_enabled,
+                   proxy_count, last_sync_at, last_error, created_at, updated_at
+            FROM subscription_sources
+            WHERE id = ?
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(source)
+    }
+
     pub async fn get_all_subscription_sources(&self) -> Result<Vec<SubscriptionSource>> {
         let sources = sqlx::query_as::<_, SubscriptionSource>(
             r#"

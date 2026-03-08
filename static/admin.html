@@ -946,7 +946,7 @@
             });
             const json = await resp.json();
             if (json.success) {
-                showToast('Source added successfully (ID: ' + json.data + ')', 'success');
+                showToast(`Source added — synced ${json.data.synced} proxies, checking now...`, 'success');
                 document.getElementById('addSourceForm').reset();
                 toggleSourceFields();
                 loadSources();

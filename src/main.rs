@@ -46,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Create shared state
     let config = Arc::new(config);
-    let state = Arc::new(AppState { db: db.clone() });
+    let state = Arc::new(AppState { db: db.clone(), config: config.clone() });
 
     // Start background schedulers
     scheduler::start_schedulers(db, config.clone()).await;

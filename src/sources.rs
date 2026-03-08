@@ -188,7 +188,7 @@ pub async fn sync_subscription_sources(db: &Database) -> Result<usize> {
     Ok(total)
 }
 
-async fn sync_single_subscription(
+pub async fn sync_single_subscription(
     db: &Database,
     source: &crate::models::SubscriptionSource,
 ) -> Result<usize> {

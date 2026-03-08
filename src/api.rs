@@ -8,6 +8,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::checker;
+use crate::config::AppConfig;
 use crate::db::Database;
 use crate::models::{ProxyAdminResponse, ProxyResponse, ProxyStats, SubscriptionSourceResponse};
 use crate::sources;
@@ -15,6 +17,7 @@ use crate::sources;
 /// Shared application state
 pub struct AppState {
     pub db: Database,
+    pub config: Arc<AppConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -92,6 +95,12 @@ pub struct ToggleSourceRequest {
 #[derive(Debug, Serialize)]
 pub struct DeleteResult {
     pub deleted: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AddSourceResult {
+    pub id: i64,
+    pub synced: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -299,10 +308,14 @@ async fn admin_import_proxies(
     match sources::import_proxies_with_hint(&state.db, &proxies, "admin:import", protocol_hint)
         .await
     {
-        Ok(count) => Ok(Json(ApiResponse {
-            success: true,
-            data: ImportResult { imported: count },
-        })),
+        Ok(count) => {
+            // Trigger immediate check for newly imported proxies
+            spawn_immediate_check(state.db.clone(), state.config.clone());
+            Ok(Json(ApiResponse {
+                success: true,
+                data: ImportResult { imported: count },
+            }))
+        }
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
@@ -376,14 +389,14 @@ async fn admin_get_sources(
     }
 }
 
-/// POST /api/v1/admin/source/add
+/// POST /api/v1/admin/source/add — Create source + immediate sync & check
 async fn admin_add_source(
     State(state): State<Arc<AppState>>,
     Json(body): Json<AddSourceRequest>,
-) -> Result<Json<ApiResponse<i64>>, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<Json<ApiResponse<AddSourceResult>>, (StatusCode, Json<ErrorResponse>)> {
     let protocol_hint = body.protocol_hint.as_deref().unwrap_or("auto");
 
-    match state
+    let id = match state
         .db
         .create_subscription_source(
             &body.name,
@@ -394,18 +407,42 @@ async fn admin_add_source(
         )
         .await
     {
-        Ok(id) => Ok(Json(ApiResponse {
-            success: true,
-            data: id,
-        })),
-        Err(e) => Err((
+        Ok(id) => id,
+        Err(e) => return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
                 success: false,
                 error: e.to_string(),
             }),
         )),
+    };
+
+    // Immediately sync this new source
+    let synced = match state.db.get_subscription_source_by_id(id).await {
+        Ok(Some(source)) => {
+            match sources::sync_single_subscription(&state.db, &source).await {
+                Ok(count) => {
+                    let _ = state.db.update_subscription_sync_result(id, count as i64, None).await;
+                    count
+                }
+                Err(e) => {
+                    let _ = state.db.update_subscription_sync_result(id, 0, Some(&e.to_string())).await;
+                    0
+                }
+            }
+        }
+        _ => 0,
+    };
+
+    // Trigger immediate check for newly imported proxies
+    if synced > 0 {
+        spawn_immediate_check(state.db.clone(), state.config.clone());
     }
+
+    Ok(Json(ApiResponse {
+        success: true,
+        data: AddSourceResult { id, synced },
+    }))
 }
 
 /// DELETE /api/v1/admin/source/:id
@@ -454,10 +491,16 @@ async fn admin_sync_sources(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ApiResponse<SyncResult>>, (StatusCode, Json<ErrorResponse>)> {
     match sources::sync_subscription_sources(&state.db).await {
-        Ok(count) => Ok(Json(ApiResponse {
-            success: true,
-            data: SyncResult { synced: count },
-        })),
+        Ok(count) => {
+            // Trigger immediate check for newly synced proxies
+            if count > 0 {
+                spawn_immediate_check(state.db.clone(), state.config.clone());
+            }
+            Ok(Json(ApiResponse {
+                success: true,
+                data: SyncResult { synced: count },
+            }))
+        }
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
@@ -466,4 +509,14 @@ async fn admin_sync_sources(
             }),
         )),
     }
+}
+
+/// Spawn a background task to immediately check proxies that are due
+fn spawn_immediate_check(db: Database, config: Arc<AppConfig>) {
+    tokio::spawn(async move {
+        match checker::run_check_cycle(&db, &config.checker, &config.scoring).await {
+            Ok((s, f)) => tracing::info!(success = s, fail = f, "Immediate check cycle complete"),
+            Err(e) => tracing::warn!(error = %e, "Immediate check cycle failed"),
+        }
+    });
 }
