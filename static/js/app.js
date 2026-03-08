@@ -196,10 +196,10 @@ function initCharts() {
         },
     });
 
-    // Protocol - Polar area
+    // Protocol - Doughnut
     const protocolCtx = document.getElementById('protocolChart').getContext('2d');
     protocolChart = new Chart(protocolCtx, {
-        type: 'polarArea',
+        type: 'doughnut',
         data: {
             labels: [],
             datasets: [{
@@ -222,16 +222,11 @@ function initCharts() {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            cutout: '55%',
             plugins: {
                 legend: {
                     position: 'right',
                     labels: { font: { size: 10 }, padding: 8 },
-                },
-            },
-            scales: {
-                r: {
-                    grid: { color: 'rgba(255,255,255,0.04)' },
-                    ticks: { display: false },
                 },
             },
         },
