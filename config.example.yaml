@@ -23,6 +23,10 @@ checker:
 
 scoring:
   min_score: 60
-  # Scoring uses a built-in formula (total 100 pts):
-  #   Success rate: 50 pts | Success count: 10 pts (capped at 10)
-  #   Country detection: 10 pts | Latency: 30 pts (<=50ms=30, >=10000ms=0)
+  weight_success_rate: 0.4
+  weight_latency: 0.35
+  weight_stability: 0.25
+  # Scoring weights must sum to 1.0:
+  #   weight_success_rate: Proxy success rate importance
+  #   weight_latency: Response latency importance
+  #   weight_stability: Connection stability importance
