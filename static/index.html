@@ -189,9 +189,14 @@
                     <div class="api-toggle-group">
                         <label class="api-toggle-label" data-i18n="dashboard.api_token">Token</label>
                         <div style="display:flex;gap:8px;align-items:center;flex:1;max-width:400px;">
-                            <select id="apiTokenSelect" onchange="onTokenSelectChange()" style="flex:1;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-size:0.82rem;font-family:'JetBrains Mono',monospace;cursor:pointer;">
-                                <option value="" data-i18n="dashboard.api_token_none">Select Token</option>
-                            </select>
+                            <div class="token-dropdown" id="tokenDropdown">
+                                <button class="token-dropdown-trigger" id="tokenDropdownTrigger" onclick="toggleTokenDropdown()">
+                                    <span class="token-dropdown-text" id="tokenDropdownText" data-i18n="dashboard.api_token_none">Select Token</span>
+                                    <svg class="token-dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>
+                                </button>
+                                <div class="token-dropdown-menu" id="tokenDropdownMenu"></div>
+                                <input type="hidden" id="apiTokenSelect" value="">
+                            </div>
                             <button id="quickCreateTokenBtn" class="api-toggle-btn" onclick="quickCreateToken()" style="white-space:nowrap;padding:6px 12px;font-size:0.78rem;display:none;" data-i18n="dashboard.api_token_create">+ Create</button>
                         </div>
                     </div>
@@ -355,8 +360,7 @@
         const format = getToggleValue('apiFormatBtns');
         const sort = getToggleValue('apiSortBtns');
         const limit = getToggleValue('apiLimitBtns');
-        const select = document.getElementById('apiTokenSelect');
-        const token = select ? select.value : '';
+        const token = document.getElementById('apiTokenSelect').value;
         const resultRow = document.getElementById('apiResultRow');
 
         if (!token) {
@@ -375,14 +379,34 @@
 
     initApiToggles();
 
+    // ─── Custom Token Dropdown ───
+    function toggleTokenDropdown() {
+        const menu = document.getElementById('tokenDropdownMenu');
+        const dd = document.getElementById('tokenDropdown');
+        dd.classList.toggle('open');
+    }
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#tokenDropdown')) {
+            document.getElementById('tokenDropdown').classList.remove('open');
+        }
+    });
+
+    function selectToken(value, label) {
+        document.getElementById('apiTokenSelect').value = value;
+        document.getElementById('tokenDropdownText').textContent = label;
+        document.getElementById('tokenDropdown').classList.remove('open');
+        // Highlight selected item
+        document.querySelectorAll('.token-dropdown-item').forEach(el => {
+            el.classList.toggle('selected', el.dataset.value === value);
+        });
+        updateApiUrl();
+    }
+
     // ─── API Token Management ───
     function getSavedApiKeys() {
         try { return JSON.parse(localStorage.getItem('pp_api_keys') || '[]'); }
         catch { return []; }
-    }
-
-    function onTokenSelectChange() {
-        updateApiUrl();
     }
 
     // Load API keys from server and merge with locally-saved full keys
@@ -391,52 +415,62 @@
             const resp = await authFetch('/api/v1/auth/api-keys');
             const json = await resp.json();
             if (!json.success) return;
-            const select = document.getElementById('apiTokenSelect');
-            while (select.options.length > 1) select.remove(1);
+
+            const menu = document.getElementById('tokenDropdownMenu');
+            menu.innerHTML = '';
 
             const saved = getSavedApiKeys();
             const activeKeys = json.keys.filter(k => !k.expired);
             let hasSelectable = false;
+            let firstKey = null;
+            let firstName = '';
 
             activeKeys.forEach(k => {
                 const local = saved.find(s => s.id === k.id);
-                const opt = document.createElement('option');
+                const item = document.createElement('div');
+                item.className = 'token-dropdown-item';
+
                 if (local && local.key) {
-                    opt.value = local.key;
+                    item.dataset.value = local.key;
                     let label = k.name;
+                    let meta = '';
                     if (k.expires_at) {
                         const exp = new Date(k.expires_at + 'Z');
-                        label += ` (${I18N.t('dashboard.api_token_expires') || 'expires'} ${exp.toLocaleDateString()})`;
+                        meta = `${I18N.t('dashboard.api_token_expires') || 'expires'} ${exp.toLocaleDateString()}`;
                     } else {
-                        label += ` (${I18N.t('admin.expiry_never') || 'Never expires'})`;
+                        meta = I18N.t('admin.expiry_never') || 'Never expires';
                     }
-                    opt.textContent = label;
+                    item.innerHTML = `<span class="token-item-name">${escapeHtmlInline(label)}</span><span class="token-item-meta">${escapeHtmlInline(meta)}</span>`;
+                    item.addEventListener('click', () => selectToken(local.key, label));
                     hasSelectable = true;
+                    if (!firstKey) { firstKey = local.key; firstName = label; }
                 } else {
-                    opt.value = '';
-                    opt.disabled = true;
+                    item.classList.add('disabled');
                     let label = `${k.name} — ${k.preview}`;
+                    let meta = '';
                     if (k.expires_at) {
                         const exp = new Date(k.expires_at + 'Z');
-                        label += ` (${exp.toLocaleDateString()})`;
+                        meta = exp.toLocaleDateString();
                     }
-                    label += ` [${I18N.t('dashboard.api_token_no_key') || 'key not saved locally'}]`;
-                    opt.textContent = label;
+                    meta += ` [${I18N.t('dashboard.api_token_no_key') || 'key not saved locally'}]`;
+                    item.innerHTML = `<span class="token-item-name">${escapeHtmlInline(label)}</span><span class="token-item-meta">${escapeHtmlInline(meta.trim())}</span>`;
                 }
-                select.appendChild(opt);
+                menu.appendChild(item);
             });
+
+            if (activeKeys.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'token-dropdown-empty';
+                empty.textContent = I18N.t('dashboard.api_token_none') || 'No tokens available';
+                menu.appendChild(empty);
+            }
 
             // Show quick-create button if no selectable keys
             document.getElementById('quickCreateTokenBtn').style.display = hasSelectable ? 'none' : '';
 
             // Auto-select first available key
-            if (hasSelectable) {
-                for (let i = 1; i < select.options.length; i++) {
-                    if (!select.options[i].disabled && select.options[i].value) {
-                        select.selectedIndex = i;
-                        break;
-                    }
-                }
+            if (firstKey) {
+                selectToken(firstKey, firstName);
             }
 
             // Clean up saved keys that no longer exist on server
@@ -446,6 +480,12 @@
 
             updateApiUrl();
         } catch(e) { /* ignore */ }
+    }
+
+    function escapeHtmlInline(str) {
+        const d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
     }
 
     async function quickCreateToken() {

@@ -555,27 +555,78 @@ impl Database {
     }
 
     async fn get_latency_distribution(&self) -> Result<Vec<LatencyBucket>> {
-        let row: (i64, i64, i64, i64, i64) = sqlx::query_as(
-            r#"
-            SELECT
-                SUM(CASE WHEN avg_latency_ms >= 0 AND avg_latency_ms < 100 THEN 1 ELSE 0 END),
-                SUM(CASE WHEN avg_latency_ms >= 100 AND avg_latency_ms < 300 THEN 1 ELSE 0 END),
-                SUM(CASE WHEN avg_latency_ms >= 300 AND avg_latency_ms < 500 THEN 1 ELSE 0 END),
-                SUM(CASE WHEN avg_latency_ms >= 500 AND avg_latency_ms < 1000 THEN 1 ELSE 0 END),
-                SUM(CASE WHEN avg_latency_ms >= 1000 THEN 1 ELSE 0 END)
-            FROM proxies WHERE is_alive = 1
-            "#,
+        // Query actual latency values from alive proxies to build dynamic buckets
+        let rows: Vec<(f64,)> = sqlx::query_as(
+            "SELECT avg_latency_ms FROM proxies WHERE is_alive = 1 AND avg_latency_ms > 0 ORDER BY avg_latency_ms",
         )
-        .fetch_one(&self.pool)
+        .fetch_all(&self.pool)
         .await?;
 
-        Ok(vec![
-            LatencyBucket { range: "0-100ms".to_string(), count: row.0 },
-            LatencyBucket { range: "100-300ms".to_string(), count: row.1 },
-            LatencyBucket { range: "300-500ms".to_string(), count: row.2 },
-            LatencyBucket { range: "500-1000ms".to_string(), count: row.3 },
-            LatencyBucket { range: "1000ms+".to_string(), count: row.4 },
-        ])
+        if rows.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let values: Vec<f64> = rows.into_iter().map(|r| r.0).collect();
+        let min_val = values[0];
+        let max_val = values[values.len() - 1];
+
+        // If all values are the same, return a single bucket
+        if (max_val - min_val) < 1.0 {
+            return Ok(vec![LatencyBucket {
+                range: format!("{}ms", max_val.round() as i64),
+                count: values.len() as i64,
+            }]);
+        }
+
+        // Compute nice bucket boundaries (5-8 buckets)
+        let raw_step = (max_val - min_val) / 6.0;
+        // Round step to a "nice" number
+        let magnitude = 10f64.powf(raw_step.log10().floor());
+        let nice_step = if raw_step / magnitude < 1.5 {
+            magnitude
+        } else if raw_step / magnitude < 3.5 {
+            2.0 * magnitude
+        } else if raw_step / magnitude < 7.5 {
+            5.0 * magnitude
+        } else {
+            10.0 * magnitude
+        };
+        let nice_step = nice_step.max(10.0); // minimum 10ms step
+
+        let bucket_start = (min_val / nice_step).floor() * nice_step;
+        let mut boundaries = vec![];
+        let mut b = bucket_start;
+        while b < max_val + nice_step {
+            boundaries.push(b);
+            b += nice_step;
+            if boundaries.len() > 12 { break; } // safety cap
+        }
+
+        let mut buckets: Vec<LatencyBucket> = Vec::new();
+        for i in 0..boundaries.len() - 1 {
+            let lo = boundaries[i];
+            let hi = boundaries[i + 1];
+            let count = values.iter().filter(|&&v| v >= lo && v < hi).count() as i64;
+            let range = format!("{}-{}ms", lo.round() as i64, hi.round() as i64);
+            buckets.push(LatencyBucket { range, count });
+        }
+        // Last boundary: anything >= last lo
+        let last_lo = *boundaries.last().unwrap_or(&0.0);
+        let overflow = values.iter().filter(|&&v| v >= last_lo).count() as i64;
+        if overflow > 0 && !boundaries.is_empty() {
+            // Merge into last bucket if it exists, otherwise create one
+            if let Some(last) = buckets.last_mut() {
+                last.count += overflow;
+                let lo = boundaries[boundaries.len() - 2];
+                last.range = format!("{}ms+", lo.round() as i64);
+            }
+        }
+
+        // Remove empty buckets at the edges
+        while buckets.first().map(|b| b.count) == Some(0) { buckets.remove(0); }
+        while buckets.last().map(|b| b.count) == Some(0) { buckets.pop(); }
+
+        Ok(buckets)
     }
 
     async fn get_score_distribution(&self) -> Result<Vec<ScoreBucket>> {
