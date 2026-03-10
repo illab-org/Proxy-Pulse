@@ -15,9 +15,11 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 use std::sync::Arc;
 
 use axum::{middleware, Router};
+use axum::http::header;
 use axum::response::Html;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
+use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -120,6 +122,11 @@ async fn main() -> anyhow::Result<()> {
         .merge(admin_api)
         // Static assets (public — CSS/JS/i18n needed for login page)
         .nest_service("/static", ServeDir::new("static"))
+        // Cache-Control: browsers must revalidate static files on every request
+        .layer(SetResponseHeaderLayer::if_not_present(
+            header::CACHE_CONTROL,
+            header::HeaderValue::from_static("no-cache, must-revalidate"),
+        ))
         // Middleware
         .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
         .layer(TraceLayer::new_for_http())
