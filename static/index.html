@@ -167,7 +167,6 @@
                     <span class="chart-badge" data-i18n="dashboard.badge_export">Export</span>
                 </div>
                 <div style="padding: 16px 20px;">
-                    <p style="color:var(--text-secondary);font-size:0.82rem;margin-bottom:14px;" data-i18n="dashboard.api_desc">Get alive proxies via direct API links. Click to copy.</p>
                     <div class="api-toggle-group">
                         <label class="api-toggle-label" data-i18n="dashboard.api_format">Format</label>
                         <div class="api-toggle-btns" id="apiFormatBtns">
@@ -203,6 +202,24 @@
                                 </button>
                                 <div class="token-dropdown-menu" id="tokenDropdownMenu"></div>
                                 <input type="hidden" id="apiTokenSelect" value="">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="api-toggle-group">
+                        <label class="api-toggle-label" data-i18n="dashboard.api_country">Country</label>
+                        <div style="display:flex;gap:8px;align-items:center;flex:1;max-width:400px;">
+                            <div class="country-dropdown" id="countryDropdown">
+                                <button class="token-dropdown-trigger" id="countryDropdownTrigger" onclick="toggleCountryDropdown()">
+                                    <span class="token-dropdown-text" id="countryDropdownText" data-i18n="dashboard.api_country_all">All Countries</span>
+                                    <svg class="token-dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>
+                                </button>
+                                <div class="country-dropdown-menu" id="countryDropdownMenu">
+                                    <div class="country-search-wrap">
+                                        <input type="text" class="country-search-input" id="countrySearchInput" placeholder="Search..." autocomplete="off">
+                                    </div>
+                                    <div class="country-dropdown-list" id="countryDropdownList"></div>
+                                </div>
+                                <input type="hidden" id="apiCountrySelect" value="all">
                             </div>
                         </div>
                     </div>
@@ -417,6 +434,7 @@
         const sort = getToggleValue('apiSortBtns');
         const limit = getToggleValue('apiLimitBtns');
         const token = document.getElementById('apiTokenSelect').value;
+        const country = document.getElementById('apiCountrySelect').value;
         const resultRow = document.getElementById('apiResultRow');
 
         if (!token) {
@@ -427,6 +445,9 @@
         let url = `/api/v1/proxy/${format}?sort=${sort}`;
         if (limit !== 'all') {
             url += `&limit=${limit}`;
+        }
+        if (country && country !== 'all') {
+            url += `&country=${encodeURIComponent(country)}`;
         }
         url += `&api_key=${encodeURIComponent(token)}`;
         document.getElementById('apiResultUrl').textContent = url;
@@ -446,6 +467,9 @@
         if (!e.target.closest('#tokenDropdown')) {
             document.getElementById('tokenDropdown').classList.remove('open');
         }
+        if (!e.target.closest('#countryDropdown')) {
+            document.getElementById('countryDropdown').classList.remove('open');
+        }
     });
 
     function selectToken(value, label) {
@@ -458,6 +482,78 @@
         });
         updateApiUrl();
     }
+
+    // ─── Country Dropdown ───
+    function toggleCountryDropdown() {
+        const dd = document.getElementById('countryDropdown');
+        dd.classList.toggle('open');
+        if (dd.classList.contains('open')) {
+            const input = document.getElementById('countrySearchInput');
+            input.value = '';
+            filterCountryList('');
+            setTimeout(() => input.focus(), 50);
+        }
+    }
+
+    function selectCountry(code, label) {
+        document.getElementById('apiCountrySelect').value = code;
+        document.getElementById('countryDropdownText').textContent = label;
+        document.getElementById('countryDropdown').classList.remove('open');
+        document.querySelectorAll('.country-dropdown-list .token-dropdown-item').forEach(el => {
+            el.classList.toggle('selected', el.dataset.value === code);
+        });
+        updateApiUrl();
+    }
+
+    function filterCountryList(query) {
+        const items = document.querySelectorAll('.country-dropdown-list .token-dropdown-item');
+        const q = query.toLowerCase();
+        items.forEach(item => {
+            const text = (item.dataset.value + ' ' + item.textContent).toLowerCase();
+            item.style.display = text.includes(q) ? '' : 'none';
+        });
+    }
+
+    async function loadCountries() {
+        try {
+            const resp = await authFetch('/api/v1/proxy/countries');
+            const json = await resp.json();
+            if (!json.success) return;
+
+            const list = document.getElementById('countryDropdownList');
+            list.innerHTML = '';
+
+            // "All" option
+            const allItem = document.createElement('div');
+            allItem.className = 'token-dropdown-item selected';
+            allItem.dataset.value = 'all';
+            allItem.innerHTML = `<span class="token-item-name">${escapeHtmlInline(I18N.t('dashboard.api_country_all') || 'All Countries')}</span>`;
+            allItem.addEventListener('click', () => selectCountry('all', I18N.t('dashboard.api_country_all') || 'All Countries'));
+            list.appendChild(allItem);
+
+            json.data.forEach(code => {
+                const item = document.createElement('div');
+                item.className = 'token-dropdown-item';
+                item.dataset.value = code;
+                const flag = countryFlag(code);
+                item.innerHTML = `<span class="token-item-name">${flag} ${escapeHtmlInline(code.toUpperCase())}</span>`;
+                item.addEventListener('click', () => selectCountry(code, `${flag} ${code.toUpperCase()}`));
+                list.appendChild(item);
+            });
+
+            document.getElementById('countrySearchInput').addEventListener('input', (e) => {
+                filterCountryList(e.target.value);
+            });
+        } catch(e) { /* ignore */ }
+    }
+
+    function countryFlag(code) {
+        if (!code || code.length !== 2) return '';
+        const c = code.toUpperCase();
+        return String.fromCodePoint(...[...c].map(ch => 0x1F1E6 - 65 + ch.charCodeAt(0)));
+    }
+
+    window._loadCountries = loadCountries;
 
     // ─── API Token Management ───
     function getSavedApiKeys() {
@@ -592,6 +688,6 @@
     }).catch(() => {});
     </script>
     <script src="/static/js/app.js?v=20260310"></script>
-    <script>window._loadApiTokens && window._loadApiTokens();</script>
+    <script>window._loadApiTokens && window._loadApiTokens(); window._loadCountries && window._loadCountries();</script>
 </body>
 </html>

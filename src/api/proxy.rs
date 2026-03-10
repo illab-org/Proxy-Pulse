@@ -26,6 +26,7 @@ pub struct TopParams {
 pub struct ExportParams {
     pub sort: Option<String>,
     pub limit: Option<i64>,
+    pub country: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -44,6 +45,7 @@ pub fn proxy_api_router() -> Router<Arc<AppState>> {
         .route("/api/v1/proxy/txt", get(get_proxies_txt))
         .route("/api/v1/proxy/csv", get(get_proxies_csv))
         .route("/api/v1/proxy/stats", get(get_stats))
+        .route("/api/v1/proxy/countries", get(get_countries))
         .route("/api/v1/health", get(health_check))
         .route("/api/v1/demo-mode", get(get_demo_mode))
 }
@@ -152,8 +154,9 @@ async fn get_proxies_json(
 ) -> Result<Json<ApiResponse<ProxyListResponse>>, (StatusCode, Json<ErrorResponse>)> {
     let sort = params.sort.as_deref().unwrap_or("score");
     let limit = params.limit.map(|l| l.max(1));
+    let country = params.country.as_deref();
 
-    match state.db.get_proxies_sorted(sort, limit).await {
+    match state.db.get_proxies_sorted(sort, limit, country).await {
         Ok(proxies) => {
             let count = proxies.len();
             let proxies: Vec<ProxyResponse> =
@@ -179,8 +182,9 @@ async fn get_proxies_txt(
 ) -> impl IntoResponse {
     let sort = params.sort.as_deref().unwrap_or("score");
     let limit = params.limit.map(|l| l.max(1));
+    let country = params.country.as_deref();
 
-    match state.db.get_proxies_sorted(sort, limit).await {
+    match state.db.get_proxies_sorted(sort, limit, country).await {
         Ok(proxies) => {
             let txt: String = proxies
                 .iter()
@@ -207,8 +211,9 @@ async fn get_proxies_csv(
 ) -> impl IntoResponse {
     let sort = params.sort.as_deref().unwrap_or("score");
     let limit = params.limit.map(|l| l.max(1));
+    let country = params.country.as_deref();
 
-    match state.db.get_proxies_sorted(sort, limit).await {
+    match state.db.get_proxies_sorted(sort, limit, country).await {
         Ok(proxies) => {
             let mut csv = String::from(
                 "ip,port,protocol,country,score,latency_ms,success_count,fail_count,success_rate\n",
@@ -254,6 +259,24 @@ async fn get_stats(
         Ok(stats) => Ok(Json(ApiResponse {
             success: true,
             data: stats,
+        })),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                success: false,
+                error: e.to_string(),
+            }),
+        )),
+    }
+}
+
+async fn get_countries(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<Vec<String>>>, (StatusCode, Json<ErrorResponse>)> {
+    match state.db.get_alive_countries().await {
+        Ok(countries) => Ok(Json(ApiResponse {
+            success: true,
+            data: countries,
         })),
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,

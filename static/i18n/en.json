@@ -59,6 +59,8 @@
         "api_token_create": "+ Create",
         "api_token_expires": "expires",
         "api_token_no_key": "key not saved locally",
+        "api_country": "Country",
+        "api_country_all": "All Countries",
         "top_proxies": "Top Proxies",
         "th_proxy": "Proxy",
         "th_protocol": "Protocol",

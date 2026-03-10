@@ -276,7 +276,12 @@ impl Database {
         Ok(proxies)
     }
 
-    pub async fn get_proxies_sorted(&self, sort: &str, limit: Option<i64>) -> Result<Vec<Proxy>> {
+    pub async fn get_proxies_sorted(
+        &self,
+        sort: &str,
+        limit: Option<i64>,
+        country: Option<&str>,
+    ) -> Result<Vec<Proxy>> {
         let order_clause = match sort {
             "latency" => "avg_latency_ms ASC",
             "success_rate" => {
@@ -286,36 +291,42 @@ impl Database {
             _ => "score DESC",
         };
 
-        let sql = if let Some(lim) = limit {
-            format!(
-                r#"SELECT id, ip, port, protocol, anonymity, country, score,
-                       is_alive, success_count, fail_count, consecutive_fails,
-                       avg_latency_ms, last_check_at, last_success_at, next_check_at,
-                       created_at, updated_at, source
-                FROM proxies
-                WHERE is_alive = 1
-                ORDER BY {}
-                LIMIT {}"#,
-                order_clause, lim
-            )
-        } else {
-            format!(
-                r#"SELECT id, ip, port, protocol, anonymity, country, score,
-                       is_alive, success_count, fail_count, consecutive_fails,
-                       avg_latency_ms, last_check_at, last_success_at, next_check_at,
-                       created_at, updated_at, source
-                FROM proxies
-                WHERE is_alive = 1
-                ORDER BY {}"#,
-                order_clause
-            )
+        let has_country = matches!(country, Some(c) if !c.is_empty() && c != "all");
+        let country_filter = if has_country { " AND country = ?" } else { "" };
+
+        let limit_clause = match limit {
+            Some(lim) => format!(" LIMIT {}", lim),
+            None => String::new(),
         };
 
-        let proxies = sqlx::query_as::<_, Proxy>(&sql)
-            .fetch_all(&self.pool)
-            .await?;
+        let sql = format!(
+            r#"SELECT id, ip, port, protocol, anonymity, country, score,
+                   is_alive, success_count, fail_count, consecutive_fails,
+                   avg_latency_ms, last_check_at, last_success_at, next_check_at,
+                   created_at, updated_at, source
+            FROM proxies
+            WHERE is_alive = 1{}
+            ORDER BY {}{}"#,
+            country_filter, order_clause, limit_clause
+        );
+
+        let mut query = sqlx::query_as::<_, Proxy>(&sql);
+        if has_country {
+            query = query.bind(country.unwrap());
+        }
+
+        let proxies = query.fetch_all(&self.pool).await?;
 
         Ok(proxies)
+    }
+
+    pub async fn get_alive_countries(&self) -> Result<Vec<String>> {
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT DISTINCT country FROM proxies WHERE is_alive = 1 ORDER BY country",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(|r| r.0).collect())
     }
 
     #[allow(dead_code)]

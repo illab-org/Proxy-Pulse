@@ -59,6 +59,8 @@
         "api_token_create": "+ 作成",
         "api_token_expires": "期限",
         "api_token_no_key": "ローカルにキー未保存",
+        "api_country": "国",
+        "api_country_all": "すべての国",
         "top_proxies": "トッププロキシ",
         "th_proxy": "プロキシ",
         "th_protocol": "プロトコル",

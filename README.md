@@ -217,9 +217,10 @@ GET  /api/v1/proxy/random          # Random healthy proxy
 GET  /api/v1/proxy/top?limit=10    # Top-scored proxies
 GET  /api/v1/proxy/country/:code   # Filter by country code
 GET  /api/v1/proxy/all             # All proxies (paginated)
-GET  /api/v1/proxy/json            # Export healthy proxies as JSON
+GET  /api/v1/proxy/json            # Export as JSON (?sort=score&limit=10&country=US)
 GET  /api/v1/proxy/txt             # Export as plain text (ip:port)
 GET  /api/v1/proxy/csv             # Export as CSV
+GET  /api/v1/proxy/countries       # List distinct alive countries
 GET  /api/v1/proxy/stats           # Pool statistics & distributions
 GET  /api/v1/health                # Health check
 ```

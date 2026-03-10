@@ -189,6 +189,20 @@ body { transition: opacity 0.15s ease; }
     background: rgba(0, 0, 0, 0.12);
 }
 
+[data-theme="light"] .country-dropdown-menu {
+    background: #ffffff;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] .country-search-input {
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+}
+
+[data-theme="light"] .country-dropdown-list::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.12);
+}
+
 /* ─── Reset ─── */
 *, *::before, *::after {
     margin: 0;
@@ -1110,6 +1124,86 @@ tbody tr:hover {
     background: transparent;
 }
 .token-dropdown-menu::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+}
+
+/* ─── Country Dropdown ─── */
+.country-dropdown {
+    position: relative;
+    flex: 1;
+}
+
+.country-dropdown.open .token-dropdown-trigger {
+    border-color: var(--accent-cyan);
+    box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.15);
+}
+
+.country-dropdown.open .token-dropdown-arrow {
+    transform: rotate(180deg);
+}
+
+.country-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-accent);
+    border-radius: 10px;
+    padding: 4px;
+    z-index: 1000;
+    max-height: 240px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(12px);
+    flex-direction: column;
+}
+
+.country-dropdown.open .country-dropdown-menu {
+    display: flex;
+}
+
+.country-search-wrap {
+    padding: 4px 4px 2px;
+}
+
+.country-search-input {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    outline: none;
+    transition: var(--transition);
+    box-sizing: border-box;
+}
+
+.country-search-input:focus {
+    border-color: var(--accent-cyan);
+}
+
+.country-search-input::placeholder {
+    color: var(--text-dim);
+}
+
+.country-dropdown-list {
+    overflow-y: auto;
+    max-height: 180px;
+    padding: 2px 0;
+}
+
+.country-dropdown-list::-webkit-scrollbar {
+    width: 4px;
+}
+.country-dropdown-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+.country-dropdown-list::-webkit-scrollbar-thumb {
     background: rgba(255,255,255,0.1);
     border-radius: 2px;
 }

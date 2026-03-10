@@ -59,6 +59,8 @@
         "api_token_create": "+ 建立",
         "api_token_expires": "到期",
         "api_token_no_key": "本地未儲存金鑰",
+        "api_country": "國家",
+        "api_country_all": "所有國家",
         "top_proxies": "最優代理",
         "th_proxy": "代理",
         "th_protocol": "協定",
