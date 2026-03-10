@@ -1,28 +1,17 @@
 use std::path::PathBuf;
-use std::sync::LazyLock;
 use tokio::process::Command;
-use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
 use crate::db::Database;
 
 const REPO: &str = "OpenInfra-Labs/Proxy-Pulse";
 const CHECK_INTERVAL_SECS: u64 = 30; // Check every 30 seconds
-const CACHE_TTL_SECS: u64 = 14400; // Cache for 4 hours
 
 #[derive(Clone)]
 struct ReleaseEntry {
     version: String,
     date: String,
 }
-
-struct ReleaseCache {
-    entries: Vec<ReleaseEntry>,
-    fetched_at: std::time::Instant,
-}
-
-static RELEASE_CACHE: LazyLock<RwLock<Option<ReleaseCache>>> =
-    LazyLock::new(|| RwLock::new(None));
 
 /// Spawn the auto-update background task
 pub fn spawn_auto_updater(db: Database) {
@@ -96,18 +85,8 @@ pub async fn check_and_update() -> anyhow::Result<bool> {
     Ok(true)
 }
 
-/// Fetch and cache releases from GitHub Atom feed (not subject to API rate limits)
+/// Fetch releases from GitHub Atom feed (not subject to API rate limits)
 async fn fetch_atom_releases() -> anyhow::Result<Vec<ReleaseEntry>> {
-    // Check cache first
-    {
-        let cache = RELEASE_CACHE.read().await;
-        if let Some(ref c) = *cache {
-            if c.fetched_at.elapsed().as_secs() < CACHE_TTL_SECS {
-                return Ok(c.entries.clone());
-            }
-        }
-    }
-
     let url = format!("https://github.com/{}/releases.atom", REPO);
     let client = reqwest::Client::builder()
         .user_agent("Proxy-Pulse-Updater")
@@ -119,15 +98,6 @@ async fn fetch_atom_releases() -> anyhow::Result<Vec<ReleaseEntry>> {
 
     if entries.is_empty() {
         return Err(anyhow::anyhow!("No releases found in Atom feed"));
-    }
-
-    // Update cache
-    {
-        let mut cache = RELEASE_CACHE.write().await;
-        *cache = Some(ReleaseCache {
-            entries: entries.clone(),
-            fetched_at: std::time::Instant::now(),
-        });
     }
 
     Ok(entries)
