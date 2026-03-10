@@ -630,6 +630,12 @@
                 </svg>
                 <span data-i18n="admin.tab_system">System Settings</span>
             </button>
+            <button class="admin-tab" data-tab="update">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:middle;margin-right:6px;">
+                    <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+                </svg>
+                <span data-i18n="admin.tab_update">Version & Update</span>
+            </button>
         </div>
 
         <!-- ═══ Tab: Proxy Management ═══ -->
@@ -849,61 +855,6 @@
 
         <!-- ═══ System Settings Panel ═══ -->
         <div class="tab-panel" id="panel-system">
-            <!-- Version & Update -->
-            <div class="admin-section">
-                <div class="admin-section-header">
-                    <div class="admin-section-title">
-                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
-                        </svg>
-                        <span data-i18n="admin.version_update">Version & Update</span>
-                    </div>
-                </div>
-                <div style="max-width:600px;">
-                    <div style="display:flex;align-items:center;gap:15px;margin-bottom:15px;">
-                        <div>
-                            <div style="font-size:13px;color:var(--text-dim);" data-i18n="admin.current_version">Current Version</div>
-                            <div id="currentVersionDisplay" style="font-size:18px;font-weight:600;color:var(--text-main);margin-top:2px;">v—</div>
-                        </div>
-                        <div style="flex:1;"></div>
-                        <div id="updateStatusArea">
-                            <span id="updateStatusText" style="font-size:13px;color:var(--text-dim);" data-i18n="admin.checking_update">Checking for updates...</span>
-                        </div>
-                    </div>
-                    <div id="updateAvailableArea" style="display:none;padding:12px;border-radius:8px;background:var(--success-bg, rgba(46,204,113,0.1));border:1px solid var(--success-border, rgba(46,204,113,0.3));margin-bottom:15px;">
-                        <div style="display:flex;align-items:center;gap:10px;">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-green, #2ecc71)" stroke-width="2" style="width:20px;height:20px;flex-shrink:0;">
-                                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                            </svg>
-                            <div style="flex:1;">
-                                <div style="font-weight:600;color:var(--text-main);"><span data-i18n="admin.new_version_available">New version available</span>: <span id="latestVersionDisplay">—</span></div>
-                            </div>
-                            <button type="button" class="btn btn-primary" id="manualUpdateBtn" onclick="triggerManualUpdate()">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
-                                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-                                </svg>
-                                <span data-i18n="admin.update_now">Update Now</span>
-                            </button>
-                        </div>
-                    </div>
-                    <div id="upToDateArea" style="display:none;padding:12px;border-radius:8px;background:rgba(46,204,113,0.08);border:1px solid rgba(46,204,113,0.2);margin-bottom:15px;">
-                        <div style="display:flex;align-items:center;gap:10px;">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-green, #2ecc71)" stroke-width="2" style="width:20px;height:20px;">
-                                <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-                            </svg>
-                            <span style="color:var(--text-main);font-weight:500;" data-i18n="admin.up_to_date">You are running the latest version</span>
-                        </div>
-                    </div>
-                    <!-- Release History -->
-                    <div style="margin-top:10px;">
-                        <div style="font-size:13px;font-weight:600;color:var(--text-main);margin-bottom:8px;" data-i18n="admin.release_history">Release History</div>
-                        <div id="releaseHistoryList" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;">
-                            <div style="padding:12px;color:var(--text-dim);font-size:13px;" data-i18n="common.loading">Loading...</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- System Settings -->
             <div class="admin-section">
                 <div class="admin-section-header">
@@ -921,16 +872,6 @@
                     </button>
                 </div>
                 <form id="systemSettingsForm" onsubmit="saveSystemSettings(event)" style="max-width:600px;">
-                    <div class="form-group">
-                        <label class="form-label" style="display:flex;align-items:center;gap:10px;">
-                            <span data-i18n="admin.auto_update">Auto Update</span>
-                            <label class="toggle">
-                                <input type="checkbox" id="systemAutoUpdate" checked>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </label>
-                        <div class="form-hint" data-i18n="admin.auto_update_hint">When enabled, the system periodically checks for new releases and updates automatically</div>
-                    </div>
                     <div class="form-group">
                         <label class="form-label" data-i18n="admin.default_language">Default Language</label>
                         <select class="form-select" id="systemDefaultLanguage">
@@ -1000,6 +941,73 @@
                                 </svg>
                                 <span data-i18n="admin.import_db">Import Database</span>
                             </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══ Tab: Version & Update ═══ -->
+        <div class="tab-panel" id="panel-update">
+            <div class="admin-section">
+                <div class="admin-section-header">
+                    <div class="admin-section-title">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+                        </svg>
+                        <span data-i18n="admin.version_update">Version & Update</span>
+                    </div>
+                </div>
+                <div style="max-width:600px;">
+                    <div style="display:flex;align-items:center;gap:15px;margin-bottom:15px;">
+                        <div>
+                            <div style="font-size:13px;color:var(--text-dim);" data-i18n="admin.current_version">Current Version</div>
+                            <div id="currentVersionDisplay" style="font-size:18px;font-weight:600;color:var(--text-main);margin-top:2px;">v—</div>
+                        </div>
+                        <div style="flex:1;"></div>
+                        <div id="updateStatusArea">
+                            <span id="updateStatusText" style="font-size:13px;color:var(--text-dim);" data-i18n="admin.checking_update">Checking for updates...</span>
+                        </div>
+                    </div>
+                    <div id="updateAvailableArea" style="display:none;padding:12px;border-radius:8px;background:var(--success-bg, rgba(46,204,113,0.1));border:1px solid var(--success-border, rgba(46,204,113,0.3));margin-bottom:15px;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-green, #2ecc71)" stroke-width="2" style="width:20px;height:20px;flex-shrink:0;">
+                                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                            </svg>
+                            <div style="flex:1;">
+                                <div style="font-weight:600;color:var(--text-main);"><span data-i18n="admin.new_version_available">New version available</span>: <span id="latestVersionDisplay">—</span></div>
+                            </div>
+                            <button type="button" class="btn btn-primary" id="manualUpdateBtn" onclick="triggerManualUpdate()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+                                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                                </svg>
+                                <span data-i18n="admin.update_now">Update Now</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="upToDateArea" style="display:none;padding:12px;border-radius:8px;background:rgba(46,204,113,0.08);border:1px solid rgba(46,204,113,0.2);margin-bottom:15px;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-green, #2ecc71)" stroke-width="2" style="width:20px;height:20px;">
+                                <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                            </svg>
+                            <span style="color:var(--text-main);font-weight:500;" data-i18n="admin.up_to_date">You are running the latest version</span>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top:15px;">
+                        <label class="form-label" style="display:flex;align-items:center;gap:10px;">
+                            <span data-i18n="admin.auto_update">Auto Update</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="systemAutoUpdate" checked onchange="saveAutoUpdateToggle(this.checked)">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </label>
+                        <div class="form-hint" data-i18n="admin.auto_update_hint">When enabled, the system periodically checks for new releases and updates automatically</div>
+                    </div>
+                    <!-- Release History -->
+                    <div style="margin-top:20px;">
+                        <div style="font-size:13px;font-weight:600;color:var(--text-main);margin-bottom:8px;" data-i18n="admin.release_history">Release History</div>
+                        <div id="releaseHistoryList" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;">
+                            <div style="padding:12px;color:var(--text-dim);font-size:13px;" data-i18n="common.loading">Loading...</div>
                         </div>
                     </div>
                 </div>
@@ -2048,6 +2056,23 @@
             btn.disabled = false;
             btn.querySelector('span').textContent = I18N.t('admin.update_now') || 'Update Now';
         }
+    }
+
+    async function saveAutoUpdateToggle(checked) {
+        if (demoGuard()) return;
+        try {
+            const resp = await authFetch('/api/v1/admin/settings/system');
+            const json = await resp.json();
+            if (json.success) {
+                const d = json.data;
+                d.auto_update = checked;
+                await authFetch('/api/v1/admin/settings/system', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(d),
+                });
+            }
+        } catch(_) {}
     }
 
     // Load version info on page load

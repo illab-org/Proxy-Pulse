@@ -214,6 +214,7 @@
         "checker_targets_hint": "用于验证代理连通性的 URL（每行一个）",
         "checker_saved": "检测设置已保存",
         "tab_system": "系统设置",
+        "tab_update": "版本与更新",
         "system_settings": "系统设置",
         "version_update": "版本与更新",
         "current_version": "当前版本",

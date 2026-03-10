@@ -214,6 +214,7 @@
         "checker_targets_hint": "URLs used to verify proxy connectivity (one per line)",
         "checker_saved": "Checker settings saved",
         "tab_system": "System Settings",
+        "tab_update": "Version & Update",
         "system_settings": "System Settings",
         "version_update": "Version & Update",
         "current_version": "Current Version",

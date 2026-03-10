@@ -214,6 +214,7 @@
         "checker_targets_hint": "プロキシの接続確認に使用する URL（1行に1つ）",
         "checker_saved": "チェッカー設定が保存されました",
         "tab_system": "システム設定",
+        "tab_update": "バージョンと更新",
         "system_settings": "システム設定",
         "version_update": "バージョンと更新",
         "current_version": "現在のバージョン",

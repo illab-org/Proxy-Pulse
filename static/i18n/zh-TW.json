@@ -213,6 +213,7 @@
         "checker_targets_hint": "用於驗證代理連通性的 URL（每行一個）",
         "checker_saved": "檢測設定已儲存",
         "tab_system": "系統設定",
+        "tab_update": "版本與更新",
         "system_settings": "系統設定",
         "version_update": "版本與更新",
         "current_version": "目前版本",
