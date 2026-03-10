@@ -38,3 +38,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1"
 rand = "0.8"
 uuid = { version = "1", features = ["v4"] }
+bcrypt = "0.16"
+sha2 = "0.10"
+hex = "0.4"
+axum-extra = { version = "0.9", features = ["cookie"] }

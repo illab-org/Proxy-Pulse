@@ -158,6 +158,11 @@ pub async fn start_schedulers(db: Database, config: Arc<AppConfig>) {
                 Ok(count) => info!(deleted = count, "Old check logs cleaned up"),
                 Err(e) => error!(error = %e, "Log cleanup failed"),
             }
+            // Also clean up expired sessions
+            match db_cleanup.cleanup_expired_sessions().await {
+                Ok(count) if count > 0 => info!(deleted = count, "Expired sessions cleaned up"),
+                _ => {}
+            }
         }
     });
 }

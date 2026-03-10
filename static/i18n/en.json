@@ -3,6 +3,7 @@
         "dashboard": "Dashboard",
         "admin": "Admin",
         "system_online": "System Online",
+        "logout": "Logout",
         "loading": "Loading...",
         "refresh": "Refresh",
         "actions": "Actions",

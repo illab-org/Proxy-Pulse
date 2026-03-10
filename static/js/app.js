@@ -5,6 +5,35 @@
 const API_BASE = '/api/v1';
 const REFRESH_INTERVAL = 30000; // 30 seconds
 
+// Auth-aware fetch wrapper
+function authFetch(url, options = {}) {
+    const token = localStorage.getItem('pp_token');
+    if (token) {
+        options.headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
+    }
+    return fetch(url, options).then(resp => {
+        if (resp.status === 401) {
+            localStorage.removeItem('pp_token');
+            document.cookie = 'pp_token=; path=/; max-age=0';
+            window.location.href = '/login';
+        }
+        return resp;
+    });
+}
+
+function logout() {
+    const token = localStorage.getItem('pp_token');
+    if (token) {
+        fetch('/api/v1/auth/logout', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+        }).catch(() => {});
+    }
+    localStorage.removeItem('pp_token');
+    document.cookie = 'pp_token=; path=/; max-age=0';
+    window.location.href = '/login';
+}
+
 // Chart instances
 let latencyChart = null;
 let protocolChart = null;
@@ -77,8 +106,8 @@ function updateTime() {
 async function fetchAllData() {
     try {
         const [statsRes, topRes] = await Promise.all([
-            fetch(`${API_BASE}/proxy/stats`),
-            fetch(`${API_BASE}/proxy/top?limit=20`),
+            authFetch(`${API_BASE}/proxy/stats`),
+            authFetch(`${API_BASE}/proxy/top?limit=20`),
         ]);
 
         if (statsRes.ok) {

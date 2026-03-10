@@ -503,6 +503,7 @@
                     <button class="lang-option" data-lang="ja">日本語</button>
                 </div>
             </div>
+            <button onclick="logout()" style="padding:6px 14px;border-radius:8px;color:#ff4757;background:rgba(255,71,87,0.08);border:1px solid rgba(255,71,87,0.3);cursor:pointer;font-size:0.8rem;font-family:Inter,sans-serif;transition:0.3s;" onmouseover="this.style.background='rgba(255,71,87,0.15)'" onmouseout="this.style.background='rgba(255,71,87,0.08)'" data-i18n="common.logout">Logout</button>
         </div>
     </header>
 
@@ -765,10 +766,39 @@
     const proxyPerPage = 25;
     let isDemoMode = false;
 
+    // Auth-aware fetch wrapper
+    function authFetch(url, options = {}) {
+        const token = localStorage.getItem('pp_token');
+        if (token) {
+            options.headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
+        }
+        return fetch(url, options).then(resp => {
+            if (resp.status === 401) {
+                localStorage.removeItem('pp_token');
+                document.cookie = 'pp_token=; path=/; max-age=0';
+                window.location.href = '/login';
+            }
+            return resp;
+        });
+    }
+
+    function logout() {
+        const token = localStorage.getItem('pp_token');
+        if (token) {
+            fetch('/api/v1/auth/logout', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+            }).catch(() => {});
+        }
+        localStorage.removeItem('pp_token');
+        document.cookie = 'pp_token=; path=/; max-age=0';
+        window.location.href = '/login';
+    }
+
     // ─── Demo Mode Detection ───
     (async function detectDemoMode() {
         try {
-            const resp = await fetch('/api/v1/demo-mode');
+            const resp = await authFetch('/api/v1/demo-mode');
             const json = await resp.json();
             isDemoMode = json.success && json.data === true;
             if (isDemoMode) {
@@ -884,7 +914,7 @@
         tbody.innerHTML = '<tr><td colspan="11"><div class="loading-overlay"><span class="spinner"></span> Loading...</div></td></tr>';
 
         try {
-            const resp = await fetch(`${API}/proxy/list?${params}`);
+            const resp = await authFetch(`${API}/proxy/list?${params}`);
             const json = await resp.json();
             if (!json.success) throw new Error(json.error);
 
@@ -947,7 +977,7 @@
         if (demoGuard()) return;
         if (!confirm(I18N.t('admin.confirm_delete_proxy'))) return;
         try {
-            const resp = await fetch(`${API}/proxy/delete/${id}`, { method: 'POST' });
+            const resp = await authFetch(`${API}/proxy/delete/${id}`, { method: 'POST' });
             const json = await resp.json();
             if (json.success) {
                 showToast(I18N.t('admin.toast_delete_success'), 'success');
@@ -962,7 +992,7 @@
         if (demoGuard()) return;
         if (!confirm(I18N.t('admin.confirm_purge'))) return;
         try {
-            const resp = await fetch(`${API}/proxy/purge-dead`, { method: 'POST' });
+            const resp = await authFetch(`${API}/proxy/purge-dead`, { method: 'POST' });
             const json = await resp.json();
             if (json.success) {
                 showToast(I18N.t('admin.toast_purged'), 'success');
@@ -986,7 +1016,7 @@
         tbody.innerHTML = '<tr><td colspan="10"><div class="loading-overlay"><span class="spinner"></span> Loading...</div></td></tr>';
 
         try {
-            const resp = await fetch(`${API}/source/list`);
+            const resp = await authFetch(`${API}/source/list`);
             const json = await resp.json();
             if (!json.success) throw new Error(json.error);
 
@@ -1045,7 +1075,7 @@
         if (type === 'text') body.content = content;
 
         try {
-            const resp = await fetch(`${API}/source/add`, {
+            const resp = await authFetch(`${API}/source/add`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
@@ -1066,7 +1096,7 @@
         if (demoGuard()) return;
         if (!confirm(I18N.t('admin.confirm_delete_source'))) return;
         try {
-            const resp = await fetch(`${API}/source/delete/${id}`, { method: 'POST' });
+            const resp = await authFetch(`${API}/source/delete/${id}`, { method: 'POST' });
             const json = await resp.json();
             if (json.success) {
                 showToast(I18N.t('admin.toast_source_deleted'), 'success');
@@ -1080,7 +1110,7 @@
     async function toggleSource(id, enabled) {
         if (demoGuard()) return;
         try {
-            const resp = await fetch(`${API}/source/${id}/toggle`, {
+            const resp = await authFetch(`${API}/source/${id}/toggle`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ enabled }),
@@ -1098,7 +1128,7 @@
         if (demoGuard()) return;
         showToast('Syncing all sources...', 'info');
         try {
-            const resp = await fetch(`${API}/source/sync`, { method: 'POST' });
+            const resp = await authFetch(`${API}/source/sync`, { method: 'POST' });
             const json = await resp.json();
             if (json.success) {
                 showToast(`${I18N.t('admin.toast_synced')} — ${json.data.synced} proxies`, 'success');
@@ -1131,7 +1161,7 @@
         btn.innerHTML = '<span class="spinner"></span> Importing...';
 
         try {
-            const resp = await fetch(`${API}/proxy/import`, {
+            const resp = await authFetch(`${API}/proxy/import`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ content, protocol_hint: protocol }),

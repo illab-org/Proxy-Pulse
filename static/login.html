@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proxy Pulse — Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .login-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .login-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 48px 40px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: var(--shadow-card), var(--shadow-glow-cyan);
+            backdrop-filter: blur(20px);
+        }
+
+        .login-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .login-logo svg {
+            width: 36px;
+            height: 36px;
+        }
+
+        .login-logo h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .login-subtitle {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 32px;
+        }
+
+        .setup-hint {
+            text-align: center;
+            color: var(--accent-cyan);
+            font-size: 0.85rem;
+            margin-bottom: 24px;
+            padding: 10px 16px;
+            background: rgba(0, 240, 255, 0.06);
+            border: 1px solid rgba(0, 240, 255, 0.15);
+            border-radius: var(--radius-sm);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.95rem;
+            transition: var(--transition);
+            outline: none;
+        }
+
+        .form-group input:focus {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.1);
+        }
+
+        .form-group input::placeholder {
+            color: var(--text-dim);
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--gradient-primary);
+            border: none;
+            border-radius: var(--radius-sm);
+            color: #0a0e1a;
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            margin-top: 8px;
+        }
+
+        .login-btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-glow-cyan);
+        }
+
+        .login-btn:active {
+            transform: translateY(0);
+        }
+
+        .login-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .login-error {
+            color: var(--accent-red);
+            font-size: 0.85rem;
+            margin-top: 16px;
+            text-align: center;
+            display: none;
+            padding: 10px;
+            background: rgba(255, 71, 87, 0.08);
+            border: 1px solid rgba(255, 71, 87, 0.2);
+            border-radius: var(--radius-sm);
+        }
+
+        .login-error.visible {
+            display: block;
+        }
+
+        .password-requirements {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+    <div class="bg-glow bg-glow-3"></div>
+
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-logo">
+                <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="16" cy="16" r="14" stroke="url(#loginGrad)" stroke-width="2" fill="none"/>
+                    <circle cx="16" cy="16" r="5" fill="url(#loginGrad)"/>
+                    <line x1="16" y1="2" x2="16" y2="8" stroke="url(#loginGrad)" stroke-width="2" stroke-linecap="round"/>
+                    <line x1="16" y1="24" x2="16" y2="30" stroke="url(#loginGrad)" stroke-width="2" stroke-linecap="round"/>
+                    <line x1="2" y1="16" x2="8" y2="16" stroke="url(#loginGrad)" stroke-width="2" stroke-linecap="round"/>
+                    <line x1="24" y1="16" x2="30" y2="16" stroke="url(#loginGrad)" stroke-width="2" stroke-linecap="round"/>
+                    <defs><linearGradient id="loginGrad" x1="0" y1="0" x2="32" y2="32"><stop stop-color="#00f0ff"/><stop offset="1" stop-color="#7b61ff"/></linearGradient></defs>
+                </svg>
+                <h1>Proxy Pulse</h1>
+            </div>
+            <p class="login-subtitle" id="subtitle">Network Monitoring System</p>
+
+            <div id="setupHint" class="setup-hint" style="display:none;">
+                First time? Create your admin account to get started.
+            </div>
+
+            <form id="authForm" onsubmit="return false;">
+                <div class="form-group">
+                    <label for="username" id="usernameLabel">Username</label>
+                    <input type="text" id="username" placeholder="admin" autocomplete="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password" id="passwordLabel">Password</label>
+                    <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" required>
+                    <p class="password-requirements" id="passwordHint" style="display:none;">Minimum 6 characters</p>
+                </div>
+                <button type="submit" class="login-btn" id="submitBtn">Login</button>
+            </form>
+
+            <div class="login-error" id="errorMsg"></div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const form = document.getElementById('authForm');
+        const username = document.getElementById('username');
+        const password = document.getElementById('password');
+        const submitBtn = document.getElementById('submitBtn');
+        const errorMsg = document.getElementById('errorMsg');
+        const setupHint = document.getElementById('setupHint');
+        const passwordHint = document.getElementById('passwordHint');
+        const subtitle = document.getElementById('subtitle');
+
+        let isSetupMode = false;
+
+        function showError(msg) {
+            errorMsg.textContent = msg;
+            errorMsg.classList.add('visible');
+        }
+
+        function hideError() {
+            errorMsg.classList.remove('visible');
+        }
+
+        // Check if setup is needed
+        async function checkStatus() {
+            try {
+                const resp = await fetch('/api/v1/auth/status');
+                const data = await resp.json();
+                if (data.needs_setup) {
+                    isSetupMode = true;
+                    setupHint.style.display = 'block';
+                    passwordHint.style.display = 'block';
+                    submitBtn.textContent = 'Create Account';
+                    subtitle.textContent = 'Initial Setup';
+                    password.setAttribute('autocomplete', 'new-password');
+                }
+            } catch (e) {
+                // Ignore — default to login mode
+            }
+        }
+
+        // Handle form submission
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideError();
+
+            const user = username.value.trim();
+            const pass = password.value;
+
+            if (!user || !pass) {
+                showError('Please fill in all fields');
+                return;
+            }
+
+            if (isSetupMode && pass.length < 6) {
+                showError('Password must be at least 6 characters');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = isSetupMode ? 'Creating...' : 'Logging in...';
+
+            try {
+                const endpoint = isSetupMode ? '/api/v1/auth/setup' : '/api/v1/auth/login';
+                const resp = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: user, password: pass }),
+                });
+
+                const data = await resp.json();
+
+                if (data.success && data.token) {
+                    // Store token
+                    localStorage.setItem('pp_token', data.token);
+                    document.cookie = `pp_token=${data.token}; path=/; max-age=${86400}; SameSite=Lax`;
+                    // Redirect to dashboard
+                    window.location.href = '/';
+                } else {
+                    showError(data.error || 'Authentication failed');
+                }
+            } catch (e) {
+                showError('Connection error. Please try again.');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = isSetupMode ? 'Create Account' : 'Login';
+            }
+        });
+
+        // Allow Enter to submit
+        password.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') form.dispatchEvent(new Event('submit'));
+        });
+
+        // If already authenticated, redirect to dashboard
+        const existingToken = localStorage.getItem('pp_token');
+        if (existingToken) {
+            fetch('/api/v1/auth/status', {
+                headers: { 'Authorization': `Bearer ${existingToken}` }
+            }).then(r => r.json()).then(data => {
+                if (!data.needs_setup) {
+                    // Verify the token is still valid
+                    fetch('/api/v1/health', {
+                        headers: { 'Authorization': `Bearer ${existingToken}` }
+                    }).then(r => {
+                        if (r.ok) window.location.href = '/';
+                    });
+                }
+            }).catch(() => {});
+        }
+
+        checkStatus();
+    })();
+    </script>
+</body>
+</html>

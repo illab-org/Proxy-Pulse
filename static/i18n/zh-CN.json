@@ -3,6 +3,7 @@
         "dashboard": "仪表盘",
         "admin": "管理",
         "system_online": "系统在线",
+        "logout": "退出登录",
         "loading": "加载中...",
         "refresh": "刷新",
         "actions": "操作",

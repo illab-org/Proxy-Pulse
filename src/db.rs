@@ -137,6 +137,35 @@ impl Database {
         .execute(&self.pool)
         .await;
 
+        // Users table (single-user auth)
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Sessions table (token-based auth)
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS sessions (
+                token TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
         Ok(())
     }
 
@@ -779,5 +808,85 @@ impl Database {
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+
+    // ── Auth ──
+
+    pub async fn has_any_user(&self) -> Result<bool> {
+        let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(row.0 > 0)
+    }
+
+    pub async fn create_user(&self, username: &str, password_hash: &str) -> Result<i64> {
+        let result = sqlx::query(
+            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+        )
+        .bind(username)
+        .bind(password_hash)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.last_insert_rowid())
+    }
+
+    pub async fn get_user_by_username(&self, username: &str) -> Result<Option<(i64, String)>> {
+        let row = sqlx::query_as::<_, (i64, String)>(
+            "SELECT id, password_hash FROM users WHERE username = ?",
+        )
+        .bind(username)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn create_session(&self, token: &str, user_id: i64, expires_at: NaiveDateTime) -> Result<()> {
+        sqlx::query(
+            "INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
+        )
+        .bind(token)
+        .bind(user_id)
+        .bind(expires_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn validate_session(&self, token: &str) -> Result<Option<i64>> {
+        let now = Utc::now().naive_utc();
+        let row = sqlx::query_as::<_, (i64,)>(
+            "SELECT user_id FROM sessions WHERE token = ? AND expires_at > ?",
+        )
+        .bind(token)
+        .bind(now)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|r| r.0))
+    }
+
+    pub async fn refresh_session(&self, token: &str, new_expires: NaiveDateTime) -> Result<()> {
+        sqlx::query("UPDATE sessions SET expires_at = ? WHERE token = ?")
+            .bind(new_expires)
+            .bind(token)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn delete_session(&self, token: &str) -> Result<()> {
+        sqlx::query("DELETE FROM sessions WHERE token = ?")
+            .bind(token)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn cleanup_expired_sessions(&self) -> Result<u64> {
+        let now = Utc::now().naive_utc();
+        let result = sqlx::query("DELETE FROM sessions WHERE expires_at <= ?")
+            .bind(now)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected())
     }
 }

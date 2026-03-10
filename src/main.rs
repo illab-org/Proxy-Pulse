@@ -1,4 +1,5 @@
 mod api;
+mod auth;
 mod checker;
 mod config;
 mod db;
@@ -8,7 +9,7 @@ mod sources;
 
 use std::sync::Arc;
 
-use axum::Router;
+use axum::{middleware, Router};
 use axum::response::Html;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
@@ -62,15 +63,37 @@ async fn main() -> anyhow::Result<()> {
     info!("Background schedulers started");
 
     // Build application router
-    let app = Router::new()
-        // Admin page route
+    //
+    // Auth-free routes: /login, /api/v1/auth/*, /static/*
+    // All other routes require authentication (token via header or cookie)
+    //
+    let auth_api_routes = Router::new()
+        .route("/api/v1/auth/status", axum::routing::get(auth::auth_status))
+        .route("/api/v1/auth/setup", axum::routing::post(auth::setup))
+        .route("/api/v1/auth/login", axum::routing::post(auth::login))
+        .route("/api/v1/auth/logout", axum::routing::post(auth::logout));
+
+    // Protected API routes (require Bearer token)
+    let protected_api = api::api_router()
+        .layer(middleware::from_fn_with_state(state.clone(), auth::auth_middleware));
+
+    // Protected page routes (redirect to /login if no cookie)
+    let protected_pages = Router::new()
+        .route("/", axum::routing::get(dashboard_page))
         .route("/admin", axum::routing::get(admin_page))
-        // API routes
-        .merge(api::api_router())
-        // Serve static files (dashboard)
+        .layer(middleware::from_fn_with_state(state.clone(), auth::page_auth_middleware));
+
+    let app = Router::new()
+        // Login page (public)
+        .route("/login", axum::routing::get(login_page))
+        // Auth API (public)
+        .merge(auth_api_routes)
+        // Protected pages
+        .merge(protected_pages)
+        // Protected API
+        .merge(protected_api)
+        // Static assets (public — CSS/JS/i18n needed for login page)
         .nest_service("/static", ServeDir::new("static"))
-        // Serve index.html at root
-        .fallback_service(ServeDir::new("static").append_index_html_on_directories(true))
         // Middleware
         .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
         .layer(TraceLayer::new_for_http())
@@ -86,7 +109,23 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Serve admin.html page
+/// Serve login.html page (public)
+async fn login_page() -> Html<String> {
+    match tokio::fs::read_to_string("static/login.html").await {
+        Ok(content) => Html(content),
+        Err(_) => Html("<h1>Login page not found</h1>".to_string()),
+    }
+}
+
+/// Serve index.html dashboard (requires auth)
+async fn dashboard_page() -> Html<String> {
+    match tokio::fs::read_to_string("static/index.html").await {
+        Ok(content) => Html(content),
+        Err(_) => Html("<h1>Dashboard not found</h1>".to_string()),
+    }
+}
+
+/// Serve admin.html page (requires auth)
 async fn admin_page() -> Html<String> {
     match tokio::fs::read_to_string("static/admin.html").await {
         Ok(content) => Html(content),
