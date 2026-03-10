@@ -7,6 +7,7 @@ use tokio::time::{interval, Duration};
 use tracing::info;
 
 /// Readable byte formatting
+#[cfg(not(target_env = "msvc"))]
 fn fmt_bytes(b: usize) -> String {
     const MB: usize = 1024 * 1024;
     if b >= MB {
@@ -123,6 +124,7 @@ pub fn purge_jemalloc() {
 }
 
 fn log_memory_stats() {
+    #[allow(unused_mut)]
     let mut parts: Vec<String> = Vec::new();
 
     // ── jemalloc stats ──
