@@ -1,4 +1,4 @@
-// Proxy Pulse - Open-source proxy pool management system
+// Proxy Pulse — open-source proxy pool management & network quality monitoring
 mod api;
 mod auth;
 mod checker;
