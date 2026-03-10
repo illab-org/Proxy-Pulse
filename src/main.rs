@@ -71,7 +71,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    info!("Starting Proxy Pulse v1.0.2");
+    info!("Starting Proxy Pulse v1.0.3");
 
     // Check for --demo flag
     let args: Vec<String> = std::env::args().collect();
