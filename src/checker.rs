@@ -30,7 +30,7 @@ pub async fn run_check_cycle(
     scoring_cfg: &ScoringConfig,
 ) -> Result<(usize, usize)> {
     let proxies = db
-        .get_proxies_due_for_check(checker_cfg.max_concurrent as i64 * 5)
+        .get_proxies_due_for_check(checker_cfg.max_concurrent as i64 * 2)
         .await?;
 
     if proxies.is_empty() {
@@ -78,6 +78,9 @@ pub async fn run_check_cycle(
         fail = total - success_count,
         "Check cycle complete"
     );
+
+    // Force jemalloc to return unused memory to OS after each cycle
+    crate::mem_monitor::purge_jemalloc();
 
     Ok((success_count, total - success_count))
 }
@@ -198,10 +201,15 @@ async fn check_proxy_against_target(
     let resp = client.get(target).send().await?;
     drop(client); // Eagerly release connection pool memory
 
-    if resp.status().is_success() || resp.status().is_redirection() {
+    // Only check status — don't read the full response body to save memory
+    let status = resp.status();
+    // Drop response (and its buffers) immediately
+    drop(resp);
+
+    if status.is_success() || status.is_redirection() {
         Ok(())
     } else {
-        anyhow::bail!("HTTP status: {}", resp.status())
+        anyhow::bail!("HTTP status: {}", status)
     }
 }
 
@@ -323,11 +331,17 @@ async fn detect_anonymity(proxy_addr: &str, protocol: &str) -> Result<String> {
     let resp = client
         .get("https://httpbin.org/headers")
         .send()
-        .await?
-        .json::<serde_json::Value>()
         .await?;
 
-    if let Some(headers) = resp.get("headers").and_then(|h| h.as_object()) {
+    // Limit body read to prevent memory bloat from unexpected large responses
+    let bytes = resp.bytes().await?;
+    if bytes.len() > 8192 {
+        anyhow::bail!("Response too large for anonymity detection");
+    }
+    let body: serde_json::Value = serde_json::from_slice(&bytes)?;
+    drop(bytes);
+
+    if let Some(headers) = body.get("headers").and_then(|h| h.as_object()) {
         let has_via = headers.contains_key("Via");
         let has_forwarded = headers.contains_key("X-Forwarded-For");
 

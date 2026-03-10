@@ -12,6 +12,15 @@ mod sources;
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
+/// Configure jemalloc: aggressive memory return to OS.
+/// dirty_decay_ms:  how long freed dirty pages linger before purging (default 10000)
+/// muzzy_decay_ms:  how long purged-but-mapped pages linger (default 10000)
+/// narenas:         limit arena count to reduce per-arena overhead
+#[cfg(not(target_env = "msvc"))]
+#[allow(non_upper_case_globals)]
+#[export_name = "malloc_conf"]
+pub static malloc_conf: &[u8] = b"dirty_decay_ms:1000,muzzy_decay_ms:1000,narenas:4\0";
+
 use std::sync::Arc;
 
 use axum::{middleware, Router};

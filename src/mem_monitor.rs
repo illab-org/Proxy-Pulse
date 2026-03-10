@@ -87,14 +87,39 @@ struct JemallocStats {
 
 /// Spawn the memory monitor background task.
 /// Logs every `interval_secs` (default 1).
+/// Also runs a periodic jemalloc purge every 30 seconds to proactively reclaim memory.
 pub fn spawn_monitor(interval_secs: u64) {
     tokio::spawn(async move {
         let mut tick = interval(Duration::from_secs(interval_secs));
+        let mut purge_counter: u64 = 0;
         loop {
             tick.tick().await;
+            purge_counter += 1;
             log_memory_stats();
+
+            // Periodic purge every 30 seconds
+            if purge_counter % 30 == 0 {
+                purge_jemalloc();
+            }
         }
     });
+}
+
+/// Force jemalloc to return all unused dirty/muzzy pages to the OS immediately.
+/// Called after check cycles and periodically by the monitor.
+#[cfg(not(target_env = "msvc"))]
+pub fn purge_jemalloc() {
+    use tikv_jemalloc_ctl::raw;
+    // "arena.4096.purge" = MALLCTL_ARENAS_ALL purge (4096 is the special "all arenas" index)
+    let key = b"arena.4096.purge\0";
+    unsafe {
+        let _ = raw::write(key, 0u64);
+    }
+}
+
+#[cfg(target_env = "msvc")]
+pub fn purge_jemalloc() {
+    // No-op on MSVC (no jemalloc)
 }
 
 fn log_memory_stats() {
