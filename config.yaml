@@ -12,9 +12,9 @@ sources:
       path: ./proxies.txt
 
 checker:
-  interval_secs: 300
+  interval_secs: 60
   timeout_secs: 10
-  max_concurrent: 50
+  max_concurrent: 200
   targets:
     - https://httpbin.org/ip
     - https://www.cloudflare.com/cdn-cgi/trace
@@ -24,3 +24,5 @@ scoring:
   weight_success_rate: 0.4
   weight_latency: 0.35
   weight_stability: 0.25
+
+

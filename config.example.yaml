@@ -14,9 +14,9 @@ sources:
     #   url: https://raw.githubusercontent.com/example/proxy-list/main/proxies.txt
 
 checker:
-  interval_secs: 300
+  interval_secs: 60
   timeout_secs: 10
-  max_concurrent: 50
+  max_concurrent: 200
   targets:
     - https://httpbin.org/ip
     - https://www.cloudflare.com/cdn-cgi/trace

@@ -16,7 +16,7 @@ pub async fn run_check_cycle(
     scoring_cfg: &ScoringConfig,
 ) -> Result<(usize, usize)> {
     let proxies = db
-        .get_proxies_due_for_check(checker_cfg.max_concurrent as i64 * 2)
+        .get_proxies_due_for_check(checker_cfg.max_concurrent as i64 * 5)
         .await?;
 
     if proxies.is_empty() {
@@ -77,41 +77,58 @@ async fn check_single_proxy(
     scoring_cfg: &ScoringConfig,
 ) -> Result<bool> {
     let proxy_addr = format!("{}:{}", proxy.ip, proxy.port);
+
+    // Check all targets in parallel to minimize per-proxy check time
+    let mut target_handles = Vec::new();
+    for target in targets {
+        let addr = proxy_addr.clone();
+        let protocol = proxy.protocol.clone();
+        let t = target.clone();
+        let handle = tokio::spawn(async move {
+            let start = Instant::now();
+            let result = check_proxy_against_target(&addr, &protocol, &t, timeout).await;
+            let elapsed = start.elapsed().as_millis() as f64;
+            (t, result, elapsed)
+        });
+        target_handles.push(handle);
+    }
+
     let mut any_success = false;
     let mut total_latency = 0.0;
     let mut success_checks = 0;
 
-    for target in targets {
-        let start = Instant::now();
-        let result = check_proxy_against_target(&proxy_addr, &proxy.protocol, target, timeout).await;
-        let elapsed = start.elapsed().as_millis() as f64;
+    for handle in target_handles {
+        match handle.await {
+            Ok((target, result, elapsed)) => match result {
+                Ok(()) => {
+                    any_success = true;
+                    success_checks += 1;
+                    total_latency += elapsed;
 
-        match result {
-            Ok(()) => {
-                any_success = true;
-                success_checks += 1;
-                total_latency += elapsed;
+                    db.insert_check_log(proxy.id, &target, true, Some(elapsed), None)
+                        .await?;
 
-                db.insert_check_log(proxy.id, target, true, Some(elapsed), None)
-                    .await?;
+                    debug!(
+                        proxy = %proxy_addr,
+                        target = %target,
+                        latency_ms = elapsed,
+                        "Check passed"
+                    );
+                }
+                Err(e) => {
+                    db.insert_check_log(proxy.id, &target, false, None, Some(&e.to_string()))
+                        .await?;
 
-                debug!(
-                    proxy = %proxy_addr,
-                    target = %target,
-                    latency_ms = elapsed,
-                    "Check passed"
-                );
-            }
+                    debug!(
+                        proxy = %proxy_addr,
+                        target = %target,
+                        error = %e,
+                        "Check failed"
+                    );
+                }
+            },
             Err(e) => {
-                db.insert_check_log(proxy.id, target, false, None, Some(&e.to_string()))
-                    .await?;
-
-                debug!(
-                    proxy = %proxy_addr,
-                    target = %target,
-                    error = %e,
-                    "Check failed"
-                );
+                warn!(error = %e, "Target check task panicked");
             }
         }
     }
@@ -175,8 +192,8 @@ fn calculate_next_check(proxy: &Proxy, success: bool) -> chrono::NaiveDateTime {
     let now = Utc::now().naive_utc();
 
     if success {
-        // Successful — check again in 1 minute
-        now + Duration::minutes(1)
+        // Successful — check again in 3 minutes
+        now + Duration::minutes(3)
     } else {
         let consecutive = proxy.consecutive_fails + 1; // +1 for this failure
         let minutes = match consecutive {

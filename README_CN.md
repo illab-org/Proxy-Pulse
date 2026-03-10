@@ -79,10 +79,10 @@ sources:
     #   url: https://example.com/proxy-list.txt
 
 checker:
-  interval_secs: 300             # 检测间隔（5 分钟）
+  interval_secs: 60              # 检测周期间隔（1 分钟）
   timeout_secs: 10               # 单个代理超时时间
-  max_concurrent: 50             # 并发检测线程数
-  targets:                       # 健康检测目标 URL
+  max_concurrent: 200            # 并发检测任务数
+  targets:                       # 健康检测目标 URL（每代理并行检测）
     - https://httpbin.org/ip
     - https://www.cloudflare.com/cdn-cgi/trace
 
@@ -149,10 +149,11 @@ WantedBy=multi-user.target
 - TCP 连接测试
 - 通过代理的 HTTP 往返验证
 - 响应时间测量
-- 多目标检测（`httpbin.org`、`cloudflare.com`）
+- **并行**多目标检测（`httpbin.org`、`cloudflare.com`）— 每代理并发检测所有目标
+- 可在 **3 分钟**内完成所有存活代理的轮训检测（200 并发 × 并行目标）
 
 ### 4. 自适应退避机制
-智能退避机制，减少对失败代理的无效检测。成功检测的代理每 **1 分钟**重新检查一次：
+智能退避机制，减少对失败代理的无效检测。成功检测的代理每 **3 分钟**重新检查一次：
 
 | 连续失败次数 | 下次检测间隔 |
 |---|---|

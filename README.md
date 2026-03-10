@@ -79,10 +79,10 @@ sources:
     #   url: https://example.com/proxy-list.txt
 
 checker:
-  interval_secs: 300             # Check interval (5 min)
+  interval_secs: 60              # Check cycle interval (1 min)
   timeout_secs: 10               # Per-proxy timeout
-  max_concurrent: 50             # Concurrent check threads
-  targets:                       # Health check target URLs
+  max_concurrent: 200            # Concurrent check tasks
+  targets:                       # Health check target URLs (checked in parallel)
     - https://httpbin.org/ip
     - https://www.cloudflare.com/cdn-cgi/trace
 
@@ -149,10 +149,11 @@ Scheduled proxy health validation including:
 - TCP connection testing
 - HTTP round-trip verification through the proxy
 - Response time measurement
-- Multi-target testing (`httpbin.org`, `cloudflare.com`)
+- **Parallel** multi-target testing (`httpbin.org`, `cloudflare.com`) — all targets checked concurrently per proxy
+- Capable of rechecking all alive proxies within **3 minutes** (200 concurrent × parallel targets)
 
 ### 4. Adaptive Retry Backoff
-Intelligent backoff mechanism to reduce unnecessary checks on failing proxies. Successfully checked proxies are rechecked every **1 minute**:
+Intelligent backoff mechanism to reduce unnecessary checks on failing proxies. Successfully checked proxies are rechecked every **3 minutes**:
 
 | Consecutive Failures | Next Check Interval |
 |---|---|
