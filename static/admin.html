@@ -935,7 +935,7 @@
                         </div>
                     </div>
                     <div class="form-group" style="margin-top:20px;">
-                        <div class="form-hint" data-i18n="admin.db_import_hint">Import a SQLite database file to replace the current data. The service will need to be restarted after import.</div>
+                        <div class="form-hint" data-i18n="admin.db_import_hint">Import a SQLite database file to replace the current data. The service will restart automatically after import.</div>
                         <div style="display:flex;gap:10px;align-items:center;margin-top:10px;">
                             <input type="file" id="dbImportFile" accept=".db,.sqlite,.sqlite3" style="display:none;" onchange="importDatabase()">
                             <button type="button" class="btn btn-danger" onclick="document.getElementById('dbImportFile').click()">
@@ -1970,7 +1970,7 @@
         const input = document.getElementById('dbImportFile');
         const file = input.files[0];
         if (!file) return;
-        const confirmMsg = I18N.t('admin.confirm_import_db') || 'Are you sure? This will replace the current database and the service will need to be restarted.';
+        const confirmMsg = I18N.t('admin.confirm_import_db') || 'Are you sure? This will replace the current database and the service will restart automatically.';
         if (!confirm(confirmMsg)) { input.value = ''; return; }
         const formData = new FormData();
         formData.append('file', file);
@@ -1981,7 +1981,7 @@
             });
             const json = await resp.json();
             if (json.success) {
-                showToast(I18N.t('admin.db_imported') || 'Database imported. Please restart the service.', 'success');
+                showToast(I18N.t('admin.db_imported') || 'Database imported. The service will restart automatically.', 'success');
             } else {
                 showToast(json.error || 'Import failed', 'error');
             }

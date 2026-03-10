@@ -2,13 +2,17 @@
 
 Proxy Pulse 的所有重要变更记录。
 
-[English Version](CHANGELOG.md)
+[English Version](CHANGELOG.md) | [返回](../README.md)
 
 ## [未发布]
 
 ### 修复
 - Docker 镜像标签现在使用小写仓库所有者名称
 - 版本号获取使用 `cache: no-cache` 并输出错误日志便于调试
+- 数据库导入后现在自动重启服务，无需手动重启
+
+### 变更
+- 更新日志移至 `docs/` 目录
 
 ## [1.2.1] - 2026-03-10
 

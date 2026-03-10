@@ -580,8 +580,14 @@ async fn admin_import_db(
     let _ = tokio::fs::remove_file(format!("{}-wal", state.db_path)).await;
     let _ = tokio::fs::remove_file(format!("{}-shm", state.db_path)).await;
 
+    // Schedule process exit so the run script / Docker / systemd restarts us
+    tokio::spawn(async {
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        std::process::exit(0);
+    });
+
     Ok(Json(serde_json::json!({
         "success": true,
-        "data": { "message": "Database imported. Please restart the service." }
+        "data": { "message": "Database imported. The service will restart automatically." }
     })))
 }

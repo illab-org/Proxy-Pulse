@@ -228,9 +228,9 @@
         "export_db": "导出数据库",
         "db_export_hint": "将当前数据库导出为 SQLite 文件进行备份",
         "import_db": "导入数据库",
-        "db_import_hint": "导入 SQLite 数据库文件以替换当前数据。导入后需要重启服务。",
-        "confirm_import_db": "确定要导入吗？这将替换当前数据库，导入后需要重启服务。",
-        "db_imported": "数据库已导入，请重启服务。"
+        "db_import_hint": "导入 SQLite 数据库文件以替换当前数据。导入后服务将自动重启。",
+        "confirm_import_db": "确定要导入吗？这将替换当前数据库，导入后服务将自动重启。",
+        "db_imported": "数据库已导入，服务将自动重启。"
     },
     "lang": {
         "en": "English",

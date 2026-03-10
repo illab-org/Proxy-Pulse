@@ -2,13 +2,17 @@
 
 All notable changes to Proxy Pulse are documented in this file.
 
-[中文版](CHANGELOG.zh-CN.md)
+[中文版](CHANGELOG.zh-CN.md) | [返回](../README.md)
 
 ## [Unreleased]
 
 ### Fixed
 - Docker image tags now use lowercase repository owner name
 - Version fetch uses `cache: no-cache` with error logging for debugging
+- Database import now auto-restarts the service instead of requiring manual restart
+
+### Changed
+- Moved changelogs to `docs/` folder
 
 ## [1.2.1] - 2026-03-10
 

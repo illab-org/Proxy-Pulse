@@ -228,9 +228,9 @@
         "export_db": "Export Database",
         "db_export_hint": "Export the current database as a SQLite file for backup",
         "import_db": "Import Database",
-        "db_import_hint": "Import a SQLite database file to replace the current data. The service will need to be restarted after import.",
-        "confirm_import_db": "Are you sure? This will replace the current database and the service will need to be restarted.",
-        "db_imported": "Database imported. Please restart the service."
+        "db_import_hint": "Import a SQLite database file to replace the current data. The service will restart automatically after import.",
+        "confirm_import_db": "Are you sure? This will replace the current database and the service will restart automatically.",
+        "db_imported": "Database imported. The service will restart automatically."
     },
     "lang": {
         "en": "English",
