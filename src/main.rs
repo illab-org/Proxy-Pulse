@@ -126,9 +126,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/v1/auth/status", axum::routing::get(auth::auth_status))
         .route("/api/v1/auth/setup", axum::routing::post(auth::setup))
         .route("/api/v1/auth/login", axum::routing::post(auth::login))
-        .route("/api/v1/auth/logout", axum::routing::post(auth::logout))
-        .route("/api/v1/health", axum::routing::get(api::health_check))
-        .route("/api/v1/demo-mode", axum::routing::get(api::get_demo_mode));
+        .route("/api/v1/auth/logout", axum::routing::post(auth::logout));
 
     // Proxy export routes — accept session token OR API key
     let proxy_api = api::proxy_api_router()
@@ -188,6 +186,7 @@ async fn main() -> anyhow::Result<()> {
         .merge(user_mgmt)
         // Static assets (public — CSS/JS/i18n needed for login page)
         .route("/static/*path", axum::routing::get(static_handler))
+        .route("/favicon.ico", axum::routing::get(favicon_handler))
         // Cache-Control: browsers must revalidate static files on every request
         .layer(SetResponseHeaderLayer::if_not_present(
             header::CACHE_CONTROL,
@@ -243,6 +242,16 @@ async fn static_handler(axum::extract::Path(path): axum::extract::Path<String>) 
         Some(file) => {
             let mime = mime_guess::from_path(&path).first_or_octet_stream();
             ([(header::CONTENT_TYPE, mime.as_ref())], file.data).into_response()
+        }
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+/// Serve favicon.ico (embedded SVG)
+async fn favicon_handler() -> Response {
+    match StaticAssets::get("favicon.svg") {
+        Some(file) => {
+            ([(header::CONTENT_TYPE, "image/svg+xml")], file.data).into_response()
         }
         None => StatusCode::NOT_FOUND.into_response(),
     }

@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n="dashboard.title">Proxy Pulse — Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -680,7 +681,9 @@
     });
 
     // Fetch version from API
-    fetch('/api/v1/health', { cache: 'no-cache' }).then(r => r.json()).then(d => {
+    const token = localStorage.getItem('pp_token');
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+    fetch('/api/v1/health', { cache: 'no-cache', headers }).then(r => r.json()).then(d => {
         if (d.success && d.data && d.data.version) {
             const el = document.getElementById('footerVersion');
             if (el) el.textContent = 'Proxy Pulse v' + d.data.version;

@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n="admin.title">Proxy Pulse — Admin Panel</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -168,7 +169,8 @@
             cursor: pointer;
         }
         /* Custom dropdown */
-        .custom-select { position: relative; display: inline-block; }
+        .custom-select { position: relative; display: inline-block; z-index: 1; }
+        .custom-select:has(.custom-select-dropdown.show) { z-index: 9999; }
         .custom-select-trigger {
             display: flex; align-items: center; justify-content: space-between; gap: 8px;
             padding: 10px 14px; background: rgba(10, 14, 26, 0.6);
@@ -575,7 +577,6 @@
             padding: 24px;
             backdrop-filter: blur(16px);
             position: relative;
-            overflow: hidden;
         }
         .update-card-accent {
             position: absolute;
@@ -583,6 +584,7 @@
             height: 3px;
             background: var(--gradient-primary);
             border-radius: var(--radius) var(--radius) 0 0;
+            overflow: hidden;
         }
         .update-card-header {
             display: flex;
@@ -2736,7 +2738,7 @@
     }
 
     // ─── Fetch Version ───
-    fetch('/api/v1/health', { cache: 'no-cache' }).then(r => r.json()).then(d => {
+    authFetch('/api/v1/health', { cache: 'no-cache' }).then(r => r.json()).then(d => {
         if (d.success && d.data && d.data.version) {
             const el = document.getElementById('adminFooterVersion');
             if (el) el.textContent = 'Proxy Pulse v' + d.data.version;

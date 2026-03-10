@@ -3,7 +3,6 @@ mod proxy;
 
 pub use admin::admin_api_router;
 pub use proxy::proxy_api_router;
-pub use proxy::{health_check, get_demo_mode};
 
 use axum::http::StatusCode;
 use axum::response::Json;

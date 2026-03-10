@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n="settings.title">Proxy Pulse — Settings</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -77,7 +78,8 @@
             padding-right: 36px;
             cursor: pointer;
         }
-        .custom-select { position: relative; display: inline-block; width: 100%; }
+        .custom-select { position: relative; display: inline-block; width: 100%; z-index: 1; }
+        .custom-select:has(.custom-select-dropdown.show) { z-index: 9999; }
         .custom-select-trigger {
             display: flex; align-items: center; justify-content: space-between; gap: 8px;
             padding: 10px 14px; background: rgba(10, 14, 26, 0.6);
