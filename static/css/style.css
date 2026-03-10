@@ -580,6 +580,7 @@ body {
 
 .chart-card.api-links-card {
     overflow: visible;
+    min-width: 0;
 }
 
 .chart-card:hover, .table-card:hover {
