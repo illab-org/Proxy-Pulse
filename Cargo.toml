@@ -1,6 +1,6 @@
 [package]
 name = "proxy-pulse"
-version = "1.2.6"
+version = "1.2.7"
 edition = "2021"
 description = "Open-source proxy pool management and network quality monitoring system"
 license = "MIT"
