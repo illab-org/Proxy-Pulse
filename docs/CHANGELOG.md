@@ -7,6 +7,7 @@ All notable changes to Proxy Pulse are documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Docker base image changed from `debian:bookworm-slim` to `ubuntu:24.04` to fix GLIBC_2.39 compatibility
 - Docker image tags now use lowercase repository owner name
 - Version fetch uses `cache: no-cache` with error logging for debugging
 - Database import now auto-restarts the service instead of requiring manual restart
