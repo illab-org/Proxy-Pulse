@@ -1177,6 +1177,7 @@
                     <div class="form-group">
                         <label class="form-label" data-i18n="admin.default_language">Default Language</label>
                         <select class="form-select" id="systemDefaultLanguage">
+                            <option value="auto" data-i18n="admin.language_auto">Auto (Browser)</option>
                             <option value="en">English</option>
                             <option value="zh-CN">简体中文</option>
                             <option value="zh-TW">繁體中文</option>
@@ -2521,9 +2522,23 @@
     }
 
     // ─── Database Export/Import ───
-    function exportDatabase() {
+    async function exportDatabase() {
         if (demoGuard()) return;
-        window.location.href = '/api/v1/admin/db/export';
+        try {
+            const resp = await authFetch('/api/v1/admin/db/export');
+            if (!resp.ok) throw new Error('Export failed');
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'proxy_pulse.db';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch(e) {
+            showToast('Export failed', 'error');
+        }
     }
 
     async function importDatabase() {

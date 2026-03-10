@@ -239,6 +239,7 @@
         "schedule_evening": "Evening (18:00–00:00)",
         "default_language": "Default Language",
         "default_language_hint": "Default language for newly created users",
+        "language_auto": "Auto (Browser)",
         "default_timezone": "Default Timezone",
         "default_timezone_hint": "Default timezone for newly created users",
         "default_theme": "Default Theme",

@@ -190,6 +190,14 @@ impl Database {
         .bind(error)
         .execute(&self.pool)
         .await?;
+
+        // Keep only the latest 10,000 log entries
+        sqlx::query(
+            "DELETE FROM check_logs WHERE id NOT IN (SELECT id FROM check_logs ORDER BY id DESC LIMIT 10000)"
+        )
+        .execute(&self.pool)
+        .await?;
+
         Ok(())
     }
 

@@ -443,7 +443,7 @@ async fn admin_get_system_settings(
     let install_schedule = state.db.get_setting("system.install_schedule").await
         .ok().flatten().unwrap_or_else(|| "anytime".to_string());
     let default_language = state.db.get_setting("system.default_language").await
-        .ok().flatten().unwrap_or_else(|| "en".to_string());
+        .ok().flatten().unwrap_or_else(|| "auto".to_string());
     let default_timezone = state.db.get_setting("system.default_timezone").await
         .ok().flatten().unwrap_or_else(|| "auto".to_string());
     let default_theme = state.db.get_setting("system.default_theme").await
@@ -485,11 +485,11 @@ async fn admin_save_system_settings(
     }
 
     if let Some(ref lang) = body.default_language {
-        let valid = ["en", "zh-CN", "zh-TW", "ja"];
+        let valid = ["auto", "en", "zh-CN", "zh-TW", "ja"];
         if !valid.contains(&lang.as_str()) {
             return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
                 success: false,
-                error: "Invalid language. Must be one of: en, zh-CN, zh-TW, ja".to_string(),
+                error: "Invalid language. Must be one of: auto, en, zh-CN, zh-TW, ja".to_string(),
             })));
         }
         state.db.set_setting("system.default_language", lang).await
