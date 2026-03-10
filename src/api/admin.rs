@@ -430,8 +430,6 @@ async fn admin_save_checker_settings(
 pub struct SystemSettingsRequest {
     pub auto_update: Option<bool>,
     pub install_schedule: Option<String>,
-    pub install_schedule_from: Option<String>,
-    pub install_schedule_to: Option<String>,
     pub default_language: Option<String>,
     pub default_timezone: Option<String>,
     pub default_theme: Option<String>,
@@ -444,10 +442,6 @@ async fn admin_get_system_settings(
         .ok().flatten().map(|v| v != "false").unwrap_or(true);
     let install_schedule = state.db.get_setting("system.install_schedule").await
         .ok().flatten().unwrap_or_else(|| "anytime".to_string());
-    let install_schedule_from = state.db.get_setting("system.install_schedule_from").await
-        .ok().flatten().unwrap_or_else(|| "02:00".to_string());
-    let install_schedule_to = state.db.get_setting("system.install_schedule_to").await
-        .ok().flatten().unwrap_or_else(|| "06:00".to_string());
     let default_language = state.db.get_setting("system.default_language").await
         .ok().flatten().unwrap_or_else(|| "en".to_string());
     let default_timezone = state.db.get_setting("system.default_timezone").await
@@ -460,8 +454,6 @@ async fn admin_get_system_settings(
         "data": {
             "auto_update": auto_update,
             "install_schedule": install_schedule,
-            "install_schedule_from": install_schedule_from,
-            "install_schedule_to": install_schedule_to,
             "default_language": default_language,
             "default_timezone": default_timezone,
             "default_theme": default_theme
@@ -483,25 +475,13 @@ async fn admin_save_system_settings(
     }
 
     if let Some(ref schedule) = body.install_schedule {
-        let valid = ["anytime", "night", "custom"];
+        let valid = ["anytime", "night", "morning", "afternoon", "evening"];
         if valid.contains(&schedule.as_str()) {
             state.db.set_setting("system.install_schedule", schedule).await
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
                     success: false, error: e.to_string(),
                 })))?;
         }
-    }
-    if let Some(ref from) = body.install_schedule_from {
-        state.db.set_setting("system.install_schedule_from", from).await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
-                success: false, error: e.to_string(),
-            })))?;
-    }
-    if let Some(ref to) = body.install_schedule_to {
-        state.db.set_setting("system.install_schedule_to", to).await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
-                success: false, error: e.to_string(),
-            })))?;
     }
 
     if let Some(ref lang) = body.default_language {

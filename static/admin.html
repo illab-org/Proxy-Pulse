@@ -580,9 +580,9 @@
             border: 1px solid rgba(0,240,255,0.2);
         }
         .update-card-icon.icon-status {
-            background: linear-gradient(135deg, rgba(0,230,138,0.15), rgba(0,180,216,0.15));
-            color: var(--accent-green);
-            border: 1px solid rgba(0,230,138,0.2);
+            background: linear-gradient(135deg, rgba(0,240,255,0.15), rgba(123,97,255,0.15));
+            color: var(--accent-cyan);
+            border: 1px solid rgba(0,240,255,0.2);
         }
         .update-card-icon.icon-auto {
             background: linear-gradient(135deg, rgba(123,97,255,0.15), rgba(59,130,246,0.15));
@@ -1340,27 +1340,29 @@
                         <input type="checkbox" id="systemAutoUpdate" checked onchange="saveAutoUpdateToggle(this.checked)">
                         <span class="toggle-slider"></span>
                     </label>
-                    <div style="width:1px;height:32px;background:var(--border-subtle);margin:0 8px;"></div>
-                    <div style="display:flex;align-items:center;gap:10px;">
-                        <div class="update-card-icon" style="background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(123,97,255,0.15));color:var(--accent-blue);border:1px solid rgba(59,130,246,0.2);">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <div style="font-size:0.78rem;font-weight:500;color:var(--text-dim);margin-bottom:4px;" data-i18n="admin.install_schedule">Install Schedule</div>
-                            <select class="form-select" id="systemInstallSchedule" onchange="saveInstallSchedule(this.value)" style="min-width:140px;padding:6px 30px 6px 10px;font-size:0.82rem;">
-                                <option value="anytime" data-i18n="admin.schedule_anytime">Anytime</option>
-                                <option value="night" data-i18n="admin.schedule_night">Night (00:00–06:00)</option>
-                                <option value="custom" data-i18n="admin.schedule_custom">Custom</option>
-                            </select>
-                        </div>
-                        <div id="customScheduleRange" style="display:none;align-items:center;gap:6px;">
-                            <input type="time" class="form-input" id="scheduleFrom" value="02:00" onchange="saveInstallSchedule('custom')" style="width:100px;padding:6px 8px;font-size:0.82rem;">
-                            <span style="color:var(--text-dim);">–</span>
-                            <input type="time" class="form-input" id="scheduleTo" value="06:00" onchange="saveInstallSchedule('custom')" style="width:100px;padding:6px 8px;font-size:0.82rem;">
-                        </div>
+                </div>
+            </div>
+
+            <!-- Install Schedule Card -->
+            <div class="update-card" style="margin-bottom:20px;">
+                <div class="update-card-accent" style="background:linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);"></div>
+                <div class="auto-update-row">
+                    <div class="update-card-icon" style="background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(6,182,212,0.15));color:var(--accent-blue);border:1px solid rgba(59,130,246,0.2);">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                        </svg>
                     </div>
+                    <div class="auto-update-info">
+                        <div class="auto-update-title" data-i18n="admin.install_schedule">Install Schedule</div>
+                        <div class="auto-update-desc" data-i18n="admin.install_schedule_hint">Choose when automatic updates can be installed</div>
+                    </div>
+                    <select class="form-select" id="systemInstallSchedule" onchange="saveInstallSchedule(this.value)" style="min-width:180px;padding:6px 30px 6px 10px;font-size:0.82rem;">
+                        <option value="anytime" data-i18n="admin.schedule_anytime">Anytime</option>
+                        <option value="night" data-i18n="admin.schedule_night">Night (00:00–06:00)</option>
+                        <option value="morning" data-i18n="admin.schedule_morning">Morning (06:00–12:00)</option>
+                        <option value="afternoon" data-i18n="admin.schedule_afternoon">Afternoon (12:00–18:00)</option>
+                        <option value="evening" data-i18n="admin.schedule_evening">Evening (18:00–00:00)</option>
+                    </select>
                 </div>
             </div>
 
@@ -2457,18 +2459,11 @@
 
     async function saveInstallSchedule(value) {
         if (demoGuard()) return;
-        const rangeEl = document.getElementById('customScheduleRange');
-        rangeEl.style.display = value === 'custom' ? 'flex' : 'none';
         try {
-            const body = { install_schedule: value };
-            if (value === 'custom') {
-                body.install_schedule_from = document.getElementById('scheduleFrom').value;
-                body.install_schedule_to = document.getElementById('scheduleTo').value;
-            }
             await authFetch('/api/v1/admin/settings/system', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
+                body: JSON.stringify({ install_schedule: value }),
             });
         } catch(_) {}
     }
@@ -2489,9 +2484,6 @@
                 // Install schedule
                 const schedule = d.install_schedule || 'anytime';
                 document.getElementById('systemInstallSchedule').value = schedule;
-                document.getElementById('customScheduleRange').style.display = schedule === 'custom' ? 'flex' : 'none';
-                if (d.install_schedule_from) document.getElementById('scheduleFrom').value = d.install_schedule_from;
-                if (d.install_schedule_to) document.getElementById('scheduleTo').value = d.install_schedule_to;
             }
         } catch(e) {
             showToast('Failed to load system settings', 'error');

@@ -52,52 +52,14 @@ async fn is_within_schedule(db: &Database) -> bool {
         .flatten()
         .unwrap_or_else(|| "anytime".to_string());
 
+    let hour = chrono::Local::now().hour();
     match schedule.as_str() {
         "anytime" => true,
-        "night" => {
-            let hour = chrono::Local::now().hour();
-            hour < 6 // 00:00–06:00
-        }
-        "custom" => {
-            let from = db
-                .get_setting("system.install_schedule_from")
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| "02:00".to_string());
-            let to = db
-                .get_setting("system.install_schedule_to")
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| "06:00".to_string());
-            is_time_in_range(&from, &to)
-        }
+        "night" => hour < 6,               // 00:00–06:00
+        "morning" => (6..12).contains(&hour),   // 06:00–12:00
+        "afternoon" => (12..18).contains(&hour), // 12:00–18:00
+        "evening" => hour >= 18,            // 18:00–00:00
         _ => true,
-    }
-}
-
-fn parse_hm(s: &str) -> Option<(u32, u32)> {
-    let parts: Vec<&str> = s.split(':').collect();
-    if parts.len() == 2 {
-        Some((parts[0].parse().ok()?, parts[1].parse().ok()?))
-    } else {
-        None
-    }
-}
-
-fn is_time_in_range(from: &str, to: &str) -> bool {
-    let now = chrono::Local::now();
-    let current = now.hour() * 60 + now.minute();
-    let Some((fh, fm)) = parse_hm(from) else { return true };
-    let Some((th, tm)) = parse_hm(to) else { return true };
-    let start = fh * 60 + fm;
-    let end = th * 60 + tm;
-    if start <= end {
-        current >= start && current < end
-    } else {
-        // Wraps midnight, e.g. 22:00–06:00
-        current >= start || current < end
     }
 }
 
