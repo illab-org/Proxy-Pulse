@@ -28,6 +28,12 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
             artifact: proxy-pulse-darwin-arm64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact: proxy-pulse-windows-amd64
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            artifact: proxy-pulse-windows-arm64
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -57,11 +63,19 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Upload artifact
+      - name: Upload artifact (Unix)
+        if: runner.os != 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: target/${{ matrix.target }}/release/proxy-pulse
+
+      - name: Upload artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: target/${{ matrix.target }}/release/proxy-pulse.exe
 
   release:
     needs: build
@@ -77,13 +91,20 @@ jobs:
           mkdir -p dist
           for dir in artifacts/*/; do
             name=$(basename "$dir")
-            cp "$dir/proxy-pulse" "dist/$name"
-            chmod +x "dist/$name"
-            cd dist && tar czf "$name.tar.gz" "$name" && rm "$name" && cd ..
+            if [ -f "$dir/proxy-pulse.exe" ]; then
+              cp "$dir/proxy-pulse.exe" "dist/${name}.exe"
+              cd dist && zip "${name}.zip" "${name}.exe" && rm "${name}.exe" && cd ..
+            else
+              cp "$dir/proxy-pulse" "dist/$name"
+              chmod +x "dist/$name"
+              cd dist && tar czf "$name.tar.gz" "$name" && rm "$name" && cd ..
+            fi
           done
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: dist/*.tar.gz
+          files: |
+            dist/*.tar.gz
+            dist/*.zip

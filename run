@@ -3,37 +3,46 @@
 #  Proxy Pulse — Run / Stop Script
 #  Auto-downloads the latest release binary
 #  Self-updates when a newer version is available
+#  Works on Linux, macOS, and Windows (Git Bash/MSYS2/WSL)
 # ─────────────────────────────────────────────
 set -euo pipefail
 
 REPO="OpenInfra-Labs/Proxy-Pulse"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT_PATH="$SCRIPT_DIR/$(basename "$0")"
-BINARY="$SCRIPT_DIR/proxy-pulse"
 PID_FILE="$SCRIPT_DIR/.proxy-pulse.pid"
 CONFIG_FILE="$SCRIPT_DIR/config.yaml"
 CONFIG_EXAMPLE="$SCRIPT_DIR/config.example.yaml"
 VERSION_FILE="$SCRIPT_DIR/.proxy-pulse.version"
 
 # ─── Detect platform ───
-detect_artifact() {
+detect_platform() {
     local os arch
     os="$(uname -s | tr '[:upper:]' '[:lower:]')"
     arch="$(uname -m)"
 
     case "$os" in
-        linux)  os="linux" ;;
-        darwin) os="darwin" ;;
-        *)      echo "Unsupported OS: $os" >&2; exit 1 ;;
+        linux)          OS_NAME="linux" ;;
+        darwin)         OS_NAME="darwin" ;;
+        mingw*|msys*|cygwin*) OS_NAME="windows" ;;
+        *)              echo "Unsupported OS: $os" >&2; exit 1 ;;
     esac
 
     case "$arch" in
-        x86_64|amd64)   arch="amd64" ;;
-        aarch64|arm64)  arch="arm64" ;;
+        x86_64|amd64)   ARCH_NAME="amd64" ;;
+        aarch64|arm64)  ARCH_NAME="arm64" ;;
         *)              echo "Unsupported architecture: $arch" >&2; exit 1 ;;
     esac
 
-    echo "proxy-pulse-${os}-${arch}"
+    ARTIFACT_NAME="proxy-pulse-${OS_NAME}-${ARCH_NAME}"
+
+    if [ "$OS_NAME" = "windows" ]; then
+        BINARY="$SCRIPT_DIR/proxy-pulse.exe"
+        PKG_EXT="zip"
+    else
+        BINARY="$SCRIPT_DIR/proxy-pulse"
+        PKG_EXT="tar.gz"
+    fi
 }
 
 # ─── Self-update: check if run script itself has a newer version ───
@@ -72,22 +81,25 @@ get_latest_version() {
 
 # ─── Download release binary for a specific version ───
 download_binary() {
-    local artifact="$1"
-    local version="$2"
-    local tarball="${artifact}.tar.gz"
-    local download_url="https://github.com/${REPO}/releases/download/${version}/${tarball}"
+    local version="$1"
+    local pkg_file="${ARTIFACT_NAME}.${PKG_EXT}"
+    local download_url="https://github.com/${REPO}/releases/download/${version}/${pkg_file}"
 
-    echo "Downloading ${tarball} (${version})..."
-    if ! curl -fsSL -o "$SCRIPT_DIR/$tarball" "$download_url"; then
+    echo "Downloading ${pkg_file} (${version})..."
+    if ! curl -fsSL -o "$SCRIPT_DIR/$pkg_file" "$download_url"; then
         echo "Error: Failed to download ${download_url}" >&2
         exit 1
     fi
 
     echo "Extracting..."
-    tar xzf "$SCRIPT_DIR/$tarball" -C "$SCRIPT_DIR"
-    mv "$SCRIPT_DIR/$artifact" "$BINARY"
-    chmod +x "$BINARY"
-    rm -f "$SCRIPT_DIR/$tarball"
+    if [ "$PKG_EXT" = "zip" ]; then
+        unzip -o "$SCRIPT_DIR/$pkg_file" -d "$SCRIPT_DIR" > /dev/null
+    else
+        tar xzf "$SCRIPT_DIR/$pkg_file" -C "$SCRIPT_DIR"
+        mv "$SCRIPT_DIR/$ARTIFACT_NAME" "$BINARY"
+        chmod +x "$BINARY"
+    fi
+    rm -f "$SCRIPT_DIR/$pkg_file"
 
     # Save installed version
     echo "$version" > "$VERSION_FILE"
@@ -114,9 +126,7 @@ check_binary_update() {
 
     # No binary or no version file → download
     if [ ! -f "$BINARY" ] || [ ! -f "$VERSION_FILE" ]; then
-        local artifact
-        artifact="$(detect_artifact)"
-        download_binary "$artifact" "$latest_version"
+        download_binary "$latest_version"
         return 0
     fi
 
@@ -125,9 +135,7 @@ check_binary_update() {
 
     if [ "$current_version" != "$latest_version" ]; then
         echo "New version available: ${current_version} → ${latest_version}"
-        local artifact
-        artifact="$(detect_artifact)"
-        download_binary "$artifact" "$latest_version"
+        download_binary "$latest_version"
     else
         echo "Binary is up to date (${current_version})."
     fi
@@ -141,6 +149,38 @@ ensure_config() {
     if [ ! -f "$CONFIG_FILE" ]; then
         cp "$CONFIG_EXAMPLE" "$CONFIG_FILE"
         echo "Config: created config.yaml from config.example.yaml (default settings)."
+    fi
+}
+
+# ─── Open browser if possible ───
+open_browser() {
+    local url="$1"
+    if command -v xdg-open > /dev/null 2>&1; then
+        # Linux with desktop
+        xdg-open "$url" > /dev/null 2>&1 &
+    elif command -v open > /dev/null 2>&1; then
+        # macOS
+        open "$url"
+    elif command -v start > /dev/null 2>&1; then
+        # Windows (Git Bash / MSYS2)
+        start "$url"
+    elif [ -n "${BROWSER:-}" ]; then
+        "$BROWSER" "$url" > /dev/null 2>&1 &
+    else
+        # No browser detected (headless server) — skip silently
+        return 0
+    fi
+    echo "Browser opened: $url"
+}
+
+# ─── Read port from config.yaml ───
+get_server_port() {
+    if [ -f "$CONFIG_FILE" ]; then
+        local port
+        port=$(grep -E '^\s+port:' "$CONFIG_FILE" | head -1 | sed 's/.*port: *\([0-9]*\).*/\1/')
+        echo "${port:-8080}"
+    else
+        echo "8080"
     fi
 }
 
@@ -202,9 +242,17 @@ start_service() {
     echo "$pid" > "$PID_FILE"
     echo "Proxy Pulse started in background (PID: $pid)."
     echo "Log: $SCRIPT_DIR/proxy-pulse.log"
+
+    # Auto-open browser
+    local port
+    port="$(get_server_port)"
+    sleep 1
+    open_browser "http://localhost:${port}"
 }
 
 # ─── Main ───
+detect_platform
+
 case "${1:-}" in
     stop)
         stop_service

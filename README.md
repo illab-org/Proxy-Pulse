@@ -38,27 +38,35 @@ This project is built exclusively for **lawful and compliant** purposes, includi
 
 No Rust required — just download the `run` script and it handles everything:
 
+**Linux / macOS:**
+
 ```bash
-# Download the run script
 curl -fsSL -o run https://raw.githubusercontent.com/OpenInfra-Labs/Proxy-Pulse/main/run && chmod +x run
-
-# Start (auto-downloads binary + config for your platform)
 ./run
-
-# Check status
-./run status
-
-# Stop
-./run stop
-
-# Update to latest version
-./run update
 ```
 
+**Windows (PowerShell):**
+
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/OpenInfra-Labs/Proxy-Pulse/main/run.ps1" -OutFile run.ps1
+.\run.ps1
+```
+
+**Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `./run` | Start (auto-downloads binary + config) |
+| `./run status` | Check if running |
+| `./run stop` | Stop the service |
+| `./run update` | Update script & binary to latest |
+
 The `run` script automatically:
-- Detects your OS and CPU architecture
+- Detects your OS and CPU architecture (Linux, macOS, Windows × amd64/arm64)
 - Downloads the correct pre-compiled binary from GitHub Releases
 - Downloads `config.example.yaml` and creates `config.yaml` if not present
+- Checks for script and binary updates on every start
+- Opens the dashboard in your browser (on desktop systems)
 - Starts the service in the background
 
 ---

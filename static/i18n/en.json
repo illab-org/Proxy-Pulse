@@ -73,7 +73,7 @@
         "no_proxies": "No proxies available yet. Add proxy sources to get started.",
         "loading_proxies": "Loading proxies...",
         "last_update": "Last update",
-        "footer_version": "Proxy Pulse v1.0.0",
+        "footer_version": "Proxy Pulse v1.0.1",
         "footer_tagline": "Open Source Proxy Pool Management"
     },
     "settings": {

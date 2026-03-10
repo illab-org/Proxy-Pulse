@@ -38,27 +38,35 @@ Proxy Pulse 是一款开源的代理池生命周期管理工具，专为**合法
 
 无需安装 Rust —— 只需下载 `run` 脚本即可自动完成一切：
 
+**Linux / macOS：**
+
 ```bash
-# 下载 run 脚本
 curl -fsSL -o run https://raw.githubusercontent.com/OpenInfra-Labs/Proxy-Pulse/main/run && chmod +x run
-
-# 启动（自动下载对应平台的二进制 + 配置文件）
 ./run
-
-# 查看状态
-./run status
-
-# 停止
-./run stop
-
-# 更新到最新版本
-./run update
 ```
 
+**Windows (PowerShell)：**
+
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/OpenInfra-Labs/Proxy-Pulse/main/run.ps1" -OutFile run.ps1
+.\run.ps1
+```
+
+**命令说明：**
+
+| 命令 | 说明 |
+|------|------|
+| `./run` | 启动（自动下载二进制 + 配置文件） |
+| `./run status` | 查看运行状态 |
+| `./run stop` | 停止服务 |
+| `./run update` | 更新脚本和二进制到最新版本 |
+
 `run` 脚本会自动：
-- 检测当前操作系统和 CPU 架构
+- 检测当前操作系统和 CPU 架构（支持 Linux、macOS、Windows × amd64/arm64）
 - 从 GitHub Releases 下载对应的预编译二进制文件
 - 自动下载 `config.example.yaml` 并生成 `config.yaml`（如不存在）
+- 每次启动时检查脚本和二进制是否有更新
+- 在桌面系统上自动打开浏览器访问控制面板
 - 在后台启动服务
 
 ---
