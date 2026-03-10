@@ -1,9 +1,9 @@
-name: Build & Release
+name: Build & Deploy
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - source
 
 permissions:
   contents: write
@@ -57,30 +57,52 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Package binary
-        run: |
-          mkdir -p dist
-          cp target/${{ matrix.target }}/release/proxy-pulse dist/${{ matrix.artifact }}
-          cp config.example.yaml dist/
-          cd dist && tar czf ${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }} config.example.yaml
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: dist/${{ matrix.artifact }}.tar.gz
+          path: target/${{ matrix.target }}/release/proxy-pulse
 
-  release:
+  deploy:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: source
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: artifacts/**/*.tar.gz
+      - name: Prepare main branch content
+        run: |
+          mkdir -p deploy/build
+          for dir in artifacts/*/; do
+            name=$(basename "$dir")
+            cp "$dir/proxy-pulse" "deploy/build/$name"
+            chmod +x "deploy/build/$name"
+          done
+          cp config.example.yaml deploy/config.example.yaml
+          cp run deploy/run
+          chmod +x deploy/run
+          cp README.md deploy/ 2>/dev/null || true
+          cp README_CN.md deploy/ 2>/dev/null || true
+          cp LICENSE deploy/ 2>/dev/null || true
+          cp DISCLAIMER.md deploy/ 2>/dev/null || true
+          cp DISCLAIMER_CN.md deploy/ 2>/dev/null || true
+          cp TERMS_OF_USE.md deploy/ 2>/dev/null || true
+          cp TERMS_OF_USE_CN.md deploy/ 2>/dev/null || true
+
+      - name: Deploy to main branch
+        run: |
+          cd deploy
+          git init
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b main
+          git add -A
+          git commit -m "deploy: update build $(date -u +%Y%m%d%H%M%S) from ${GITHUB_SHA::7}"
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          git push origin main --force
