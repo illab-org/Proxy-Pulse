@@ -193,6 +193,9 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
+      - name: Lowercase owner name
+        run: echo "REPO_OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -215,5 +218,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/proxy-pulse:latest
-            ghcr.io/${{ github.repository_owner }}/proxy-pulse:v${{ needs.version-bump.outputs.version }}
+            ghcr.io/${{ env.REPO_OWNER_LC }}/proxy-pulse:latest
+            ghcr.io/${{ env.REPO_OWNER_LC }}/proxy-pulse:v${{ needs.version-bump.outputs.version }}

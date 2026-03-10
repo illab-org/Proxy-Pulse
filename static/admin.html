@@ -1993,12 +1993,12 @@
     }
 
     // ─── Fetch Version ───
-    fetch('/api/v1/health').then(r => r.json()).then(d => {
+    fetch('/api/v1/health', { cache: 'no-cache' }).then(r => r.json()).then(d => {
         if (d.success && d.data && d.data.version) {
             const el = document.getElementById('adminFooterVersion');
             if (el) el.textContent = 'Proxy Pulse v' + d.data.version;
         }
-    }).catch(() => {});
+    }).catch(e => console.warn('Failed to fetch version:', e));
     </script>
 </body>
 </html>
