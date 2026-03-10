@@ -13,7 +13,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time",
 # Web framework
 axum = { version = "0.7", features = ["json", "query"] }
 tower = { version = "0.4" }
-tower-http = { version = "0.5", features = ["fs", "cors", "trace", "set-header"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "set-header"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -33,6 +33,10 @@ tokio-cron-scheduler = "0.10"
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Embedded static assets
+rust-embed = "8"
+mime_guess = "2"
 
 # Utility
 anyhow = "1"

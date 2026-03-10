@@ -24,14 +24,18 @@ pub static malloc_conf: &[u8] = b"dirty_decay_ms:1000,muzzy_decay_ms:1000,narena
 use std::sync::Arc;
 
 use axum::{middleware, Router};
-use axum::http::header;
-use axum::response::Html;
+use axum::http::{header, StatusCode};
+use axum::response::{Html, IntoResponse, Response};
+use rust_embed::Embed;
 use tower_http::cors::{Any, CorsLayer};
-use tower_http::services::ServeDir;
 use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
+
+#[derive(Embed)]
+#[folder = "static/"]
+struct StaticAssets;
 
 use crate::api::AppState;
 use crate::config::AppConfig;
@@ -150,7 +154,7 @@ async fn main() -> anyhow::Result<()> {
         // User management API (admin only)
         .merge(user_mgmt)
         // Static assets (public — CSS/JS/i18n needed for login page)
-        .nest_service("/static", ServeDir::new("static"))
+        .route("/static/*path", axum::routing::get(static_handler))
         // Cache-Control: browsers must revalidate static files on every request
         .layer(SetResponseHeaderLayer::if_not_present(
             header::CACHE_CONTROL,
@@ -171,34 +175,40 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn serve_embedded_html(path: &str) -> Html<String> {
+    match StaticAssets::get(path) {
+        Some(file) => Html(String::from_utf8_lossy(file.data.as_ref()).into_owned()),
+        None => Html(format!("<h1>{path} not found</h1>")),
+    }
+}
+
 /// Serve login.html page (public)
 async fn login_page() -> Html<String> {
-    match tokio::fs::read_to_string("static/login.html").await {
-        Ok(content) => Html(content),
-        Err(_) => Html("<h1>Login page not found</h1>".to_string()),
-    }
+    serve_embedded_html("login.html")
 }
 
 /// Serve index.html dashboard (requires auth)
 async fn dashboard_page() -> Html<String> {
-    match tokio::fs::read_to_string("static/index.html").await {
-        Ok(content) => Html(content),
-        Err(_) => Html("<h1>Dashboard not found</h1>".to_string()),
-    }
+    serve_embedded_html("index.html")
 }
 
 /// Serve admin.html page (requires admin role)
 async fn admin_page() -> Html<String> {
-    match tokio::fs::read_to_string("static/admin.html").await {
-        Ok(content) => Html(content),
-        Err(_) => Html("<h1>Admin panel not found</h1>".to_string()),
-    }
+    serve_embedded_html("admin.html")
 }
 
 /// Serve settings.html page (requires auth)
 async fn settings_page() -> Html<String> {
-    match tokio::fs::read_to_string("static/settings.html").await {
-        Ok(content) => Html(content),
-        Err(_) => Html("<h1>Settings page not found</h1>".to_string()),
+    serve_embedded_html("settings.html")
+}
+
+/// Serve embedded static assets (CSS/JS/i18n)
+async fn static_handler(axum::extract::Path(path): axum::extract::Path<String>) -> Response {
+    match StaticAssets::get(&path) {
+        Some(file) => {
+            let mime = mime_guess::from_path(&path).first_or_octet_stream();
+            ([(header::CONTENT_TYPE, mime.as_ref())], file.data).into_response()
+        }
+        None => StatusCode::NOT_FOUND.into_response(),
     }
 }
