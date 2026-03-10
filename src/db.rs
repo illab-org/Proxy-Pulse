@@ -2,6 +2,7 @@ use anyhow::Result;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use chrono::{NaiveDateTime, Utc};
 use std::str::FromStr;
+use tracing::info;
 
 use crate::models::{
     CheckLog, CountryCount, LatencyBucket, ProtocolCount, Proxy, ProxyStats, ScoreBucket,
@@ -57,7 +58,7 @@ impl Database {
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
                 source TEXT NOT NULL DEFAULT 'unknown',
-                UNIQUE(ip, port)
+                UNIQUE(ip, port, protocol)
             );
             "#,
         )
@@ -198,6 +199,88 @@ impl Database {
             .execute(&self.pool)
             .await;
 
+        // Migration: change UNIQUE(ip, port) → UNIQUE(ip, port, protocol)
+        // so the same IP:port can exist with different protocols (e.g. http + socks5)
+        self.migrate_proxy_unique_constraint().await?;
+
+        Ok(())
+    }
+
+    /// Migrate proxies table: UNIQUE(ip, port) → UNIQUE(ip, port, protocol).
+    /// Uses SQLite's table-rebuild approach since ALTER TABLE can't change constraints.
+    async fn migrate_proxy_unique_constraint(&self) -> Result<()> {
+        // Check if migration is needed by inspecting the current table SQL
+        let row: Option<(String,)> = sqlx::query_as(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='proxies'"
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let Some((sql,)) = row else { return Ok(()) };
+
+        // Already migrated?
+        if sql.contains("UNIQUE(ip, port, protocol)") {
+            return Ok(());
+        }
+
+        info!("Migrating proxies table: UNIQUE(ip, port) → UNIQUE(ip, port, protocol)");
+
+        // Rebuild in a transaction
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query("ALTER TABLE proxies RENAME TO proxies_old")
+            .execute(&mut *tx).await?;
+
+        sqlx::query(r#"
+            CREATE TABLE proxies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ip TEXT NOT NULL,
+                port INTEGER NOT NULL,
+                protocol TEXT NOT NULL DEFAULT 'http',
+                anonymity TEXT NOT NULL DEFAULT 'unknown',
+                country TEXT NOT NULL DEFAULT 'unknown',
+                score REAL NOT NULL DEFAULT 0.0,
+                is_alive INTEGER NOT NULL DEFAULT 0,
+                success_count INTEGER NOT NULL DEFAULT 0,
+                fail_count INTEGER NOT NULL DEFAULT 0,
+                consecutive_fails INTEGER NOT NULL DEFAULT 0,
+                avg_latency_ms REAL NOT NULL DEFAULT 0.0,
+                last_check_at TEXT,
+                last_success_at TEXT,
+                next_check_at TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                source TEXT NOT NULL DEFAULT 'unknown',
+                UNIQUE(ip, port, protocol)
+            )
+        "#).execute(&mut *tx).await?;
+
+        sqlx::query(r#"
+            INSERT INTO proxies (id, ip, port, protocol, anonymity, country, score,
+                is_alive, success_count, fail_count, consecutive_fails, avg_latency_ms,
+                last_check_at, last_success_at, next_check_at, created_at, updated_at, source)
+            SELECT id, ip, port, protocol, anonymity, country, score,
+                is_alive, success_count, fail_count, consecutive_fails, avg_latency_ms,
+                last_check_at, last_success_at, next_check_at, created_at, updated_at, source
+            FROM proxies_old
+        "#).execute(&mut *tx).await?;
+
+        sqlx::query("DROP TABLE proxies_old")
+            .execute(&mut *tx).await?;
+
+        // Recreate indexes
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_proxies_alive ON proxies(is_alive)")
+            .execute(&mut *tx).await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_proxies_score ON proxies(score DESC)")
+            .execute(&mut *tx).await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_proxies_country ON proxies(country)")
+            .execute(&mut *tx).await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_proxies_next_check ON proxies(next_check_at)")
+            .execute(&mut *tx).await?;
+
+        tx.commit().await?;
+        info!("Migration complete: proxies table now supports same IP:port with different protocols");
+
         Ok(())
     }
 
@@ -217,8 +300,7 @@ impl Database {
             r#"
             INSERT INTO proxies (ip, port, protocol, source, created_at, updated_at, next_check_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(ip, port) DO UPDATE SET
-                protocol = COALESCE(excluded.protocol, proxies.protocol),
+            ON CONFLICT(ip, port, protocol) DO UPDATE SET
                 source = excluded.source,
                 updated_at = excluded.updated_at
             RETURNING id
