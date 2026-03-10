@@ -40,7 +40,6 @@ use tracing_subscriber::util::SubscriberInitExt;
 struct StaticAssets;
 
 use crate::api::AppState;
-use crate::config::AppConfig;
 use crate::db::Database;
 
 #[tokio::main]
@@ -71,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    info!("Starting Proxy Pulse v1.0.9");
+    info!("Starting Proxy Pulse v{}", env!("CARGO_PKG_VERSION"));
 
     // Check for --demo flag
     let args: Vec<String> = std::env::args().collect();
@@ -80,26 +79,23 @@ async fn main() -> anyhow::Result<()> {
         info!("🔒 DEMO MODE enabled — all write/mutation API endpoints will return 403");
     }
 
-    // Load configuration (skip --demo when looking for config path)
-    let config_path = args.iter()
+    // Database URL: from CLI arg, env var, or default
+    let db_url = args.iter()
         .skip(1)
         .find(|a| *a != "--demo")
         .cloned()
-        .unwrap_or_else(|| "config.yaml".to_string());
-
-    let config = AppConfig::load(&config_path)?;
-    info!(config = %config_path, "Configuration loaded");
+        .or_else(|| std::env::var("DATABASE_URL").ok())
+        .unwrap_or_else(|| "sqlite://proxy_pulse.db?mode=rwc".to_string());
 
     // Initialize database
-    let db = Database::new(&config.database.url).await?;
+    let db = Database::new(&db_url).await?;
     info!("Database initialized");
 
     // Create shared state
-    let config = Arc::new(config);
-    let state = Arc::new(AppState { db: db.clone(), config: config.clone(), demo_mode });
+    let state = Arc::new(AppState { db: db.clone(), demo_mode });
 
     // Start background schedulers
-    scheduler::start_schedulers(db, config.clone()).await;
+    scheduler::start_schedulers(db).await;
     info!("Background schedulers started");
 
     // Start memory monitor (logs every 60 seconds)
@@ -186,7 +182,9 @@ async fn main() -> anyhow::Result<()> {
         // Shared state
         .with_state(state);
 
-    let addr = format!("{}:{}", config.server.host, config.server.port);
+    let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
+    let addr = format!("{}:{}", host, port);
     info!(addr = %addr, "Starting HTTP server");
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;

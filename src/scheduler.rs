@@ -1,30 +1,26 @@
-use std::sync::Arc;
 use tokio::time::{interval, Duration};
 use tracing::{error, info};
 
-use crate::config::AppConfig;
 use crate::db::Database;
-use crate::sources;
 use crate::checker;
 
 /// Start all background scheduler tasks
-pub async fn start_schedulers(db: Database, config: Arc<AppConfig>) {
+pub async fn start_schedulers(db: Database) {
     let db_source = db.clone();
-    let config_source = config.clone();
 
-    // Subscription auto-sync scheduler (FIRST PRIORITY — runs every 60s, checks per-source intervals)
+    // Subscription auto-sync scheduler (runs every 60s, checks per-source intervals)
     tokio::spawn(async move {
         info!("Starting subscription auto-sync scheduler (per-source intervals)");
 
         // Run all enabled subscriptions immediately on startup
-        match sources::sync_subscription_sources(&db_source).await {
+        match crate::sources::sync_subscription_sources(&db_source).await {
             Ok(count) => {
                 info!(count = count, "Initial subscription sync complete");
                 if count > 0 {
                     let db2 = db_source.clone();
-                    let cfg2 = config_source.clone();
                     tokio::spawn(async move {
-                        match checker::run_check_cycle(&db2, &cfg2.checker, &cfg2.scoring).await {
+                        let cfg = db2.get_checker_config().await;
+                        match checker::run_check_cycle(&db2, &cfg).await {
                             Ok((s, f)) => info!(success = s, fail = f, "Post-sync check cycle complete"),
                             Err(e) => error!(error = %e, "Post-sync check cycle failed"),
                         }
@@ -47,7 +43,7 @@ pub async fn start_schedulers(db: Database, config: Arc<AppConfig>) {
                     info!(count = due_sources.len(), "Subscription sources due for auto-sync");
                     let mut synced_total = 0usize;
                     for source in &due_sources {
-                        match sources::sync_single_subscription(&db_source, source).await {
+                        match crate::sources::sync_single_subscription(&db_source, source).await {
                             Ok(count) => {
                                 let _ = db_source.update_subscription_sync_result(
                                     source.id, count as i64, None,
@@ -77,9 +73,9 @@ pub async fn start_schedulers(db: Database, config: Arc<AppConfig>) {
                     // Trigger immediate check after syncing new proxies
                     if synced_total > 0 {
                         let db2 = db_source.clone();
-                        let cfg2 = config_source.clone();
                         tokio::spawn(async move {
-                            match checker::run_check_cycle(&db2, &cfg2.checker, &cfg2.scoring).await {
+                            let cfg = db2.get_checker_config().await;
+                            match checker::run_check_cycle(&db2, &cfg).await {
                                 Ok((s, f)) => info!(success = s, fail = f, "Post-autosync check complete"),
                                 Err(e) => error!(error = %e, "Post-autosync check failed"),
                             }
@@ -92,57 +88,26 @@ pub async fn start_schedulers(db: Database, config: Arc<AppConfig>) {
         }
     });
 
-    let db_provider = db.clone();
-    let config_provider = config.clone();
-
-    // Provider source sync scheduler (config-based sources, lower priority)
-    tokio::spawn(async move {
-        let interval_secs = config_provider.sources.sync_interval_secs;
-        info!(interval_secs = interval_secs, "Starting provider source sync scheduler");
-
-        // Run immediately on startup
-        match sources::sync_sources(&db_provider, &config_provider.sources.providers).await {
-            Ok(count) => info!(count = count, "Initial provider source sync complete"),
-            Err(e) => error!(error = %e, "Initial provider source sync failed"),
-        }
-
-        let mut ticker = interval(Duration::from_secs(interval_secs));
-        ticker.tick().await; // Skip immediate tick
-
-        loop {
-            ticker.tick().await;
-            match sources::sync_sources(&db_provider, &config_provider.sources.providers).await {
-                Ok(count) => info!(count = count, "Provider source sync complete"),
-                Err(e) => error!(error = %e, "Provider source sync failed"),
-            }
-        }
-    });
-
     let db_checker = db.clone();
-    let config_checker = config.clone();
 
-    // Proxy checker scheduler
+    // Proxy checker scheduler — reads config from DB each cycle
     tokio::spawn(async move {
-        let interval_secs = config_checker.checker.interval_secs;
-        info!(interval_secs = interval_secs, "Starting proxy checker scheduler");
+        info!("Starting proxy checker scheduler");
 
         // Wait a bit for initial source sync to populate proxies
         tokio::time::sleep(Duration::from_secs(5)).await;
 
-        let mut ticker = interval(Duration::from_secs(interval_secs));
-
         loop {
-            ticker.tick().await;
-            match checker::run_check_cycle(
-                &db_checker,
-                &config_checker.checker,
-                &config_checker.scoring,
-            )
-            .await
-            {
+            // Re-read config from DB each cycle so admin changes take effect immediately
+            let cfg = db_checker.get_checker_config().await;
+            let interval_secs = cfg.interval_secs;
+
+            match checker::run_check_cycle(&db_checker, &cfg).await {
                 Ok((s, f)) => info!(success = s, fail = f, "Check cycle complete"),
                 Err(e) => error!(error = %e, "Check cycle failed"),
             }
+
+            tokio::time::sleep(Duration::from_secs(interval_secs)).await;
         }
     });
 

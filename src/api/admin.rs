@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use super::{demo_guard, ApiResponse, AppState, ErrorResponse};
-use crate::config::AppConfig;
 use crate::db::Database;
 use crate::models::{ProxyAdminResponse, SubscriptionSourceResponse};
 use crate::sources;
@@ -92,6 +91,8 @@ pub fn admin_api_router() -> Router<Arc<AppState>> {
             post(admin_toggle_source),
         )
         .route("/api/v1/admin/source/sync", post(admin_sync_sources))
+        .route("/api/v1/admin/settings/checker", get(admin_get_checker_settings))
+        .route("/api/v1/admin/settings/checker", post(admin_save_checker_settings))
 }
 
 async fn admin_get_proxies(
@@ -141,7 +142,7 @@ async fn admin_import_proxies(
         .await
     {
         Ok(count) => {
-            spawn_immediate_check(state.db.clone(), state.config.clone());
+            spawn_immediate_check(state.db.clone());
             Ok(Json(ApiResponse {
                 success: true,
                 data: ImportResult { imported: count },
@@ -277,7 +278,7 @@ async fn admin_add_source(
     };
 
     if synced > 0 {
-        spawn_immediate_check(state.db.clone(), state.config.clone());
+        spawn_immediate_check(state.db.clone());
     }
 
     Ok(Json(ApiResponse {
@@ -334,7 +335,7 @@ async fn admin_sync_sources(
     match sources::sync_subscription_sources(&state.db).await {
         Ok(count) => {
             if count > 0 {
-                spawn_immediate_check(state.db.clone(), state.config.clone());
+                spawn_immediate_check(state.db.clone());
             }
             Ok(Json(ApiResponse {
                 success: true,
@@ -351,11 +352,66 @@ async fn admin_sync_sources(
     }
 }
 
-fn spawn_immediate_check(db: Database, config: Arc<AppConfig>) {
+fn spawn_immediate_check(db: Database) {
     tokio::spawn(async move {
-        match crate::checker::run_check_cycle(&db, &config.checker, &config.scoring).await {
+        let checker_cfg = db.get_checker_config().await;
+        match crate::checker::run_check_cycle(&db, &checker_cfg).await {
             Ok((s, f)) => tracing::info!(success = s, fail = f, "Immediate check cycle complete"),
             Err(e) => tracing::warn!(error = %e, "Immediate check cycle failed"),
         }
     });
+}
+
+// ── Checker Settings ──
+
+async fn admin_get_checker_settings(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
+    let cfg = state.db.get_checker_config().await;
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "data": cfg
+    })))
+}
+
+async fn admin_save_checker_settings(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<crate::config::CheckerConfig>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
+    demo_guard(&state)?;
+
+    // Basic validation
+    if body.interval_secs < 10 || body.interval_secs > 86400 {
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "interval_secs must be between 10 and 86400".to_string(),
+        })));
+    }
+    if body.timeout_secs < 1 || body.timeout_secs > 120 {
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "timeout_secs must be between 1 and 120".to_string(),
+        })));
+    }
+    if body.max_concurrent < 1 || body.max_concurrent > 10000 {
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "max_concurrent must be between 1 and 10000".to_string(),
+        })));
+    }
+    if body.targets.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "At least one target URL is required".to_string(),
+        })));
+    }
+
+    state.db.save_checker_config(&body).await.map_err(|e| {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
+            success: false,
+            error: e.to_string(),
+        }))
+    })?;
+
+    Ok(Json(serde_json::json!({ "success": true })))
 }

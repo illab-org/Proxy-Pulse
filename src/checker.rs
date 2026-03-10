@@ -6,7 +6,7 @@ use tokio::sync::Semaphore;
 use tracing::{debug, info, warn};
 use std::sync::Arc;
 
-use crate::config::{CheckerConfig, ScoringConfig};
+use crate::config::CheckerConfig;
 use crate::db::Database;
 use crate::models::Proxy;
 
@@ -31,14 +31,13 @@ fn direct_client() -> &'static reqwest::Client {
 pub async fn run_check_cycle(
     db: &Database,
     checker_cfg: &CheckerConfig,
-    scoring_cfg: &ScoringConfig,
 ) -> Result<(usize, usize)> {
     // Prevent concurrent check cycles from overlapping
     if CHECK_RUNNING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
         info!("Check cycle already running, skipping");
         return Ok((0, 0));
     }
-    let result = run_check_cycle_inner(db, checker_cfg, scoring_cfg).await;
+    let result = run_check_cycle_inner(db, checker_cfg).await;
     CHECK_RUNNING.store(false, Ordering::SeqCst);
     result
 }
@@ -46,7 +45,6 @@ pub async fn run_check_cycle(
 async fn run_check_cycle_inner(
     db: &Database,
     checker_cfg: &CheckerConfig,
-    scoring_cfg: &ScoringConfig,
 ) -> Result<(usize, usize)> {
     let proxies = db
         .get_proxies_due_for_check(checker_cfg.max_concurrent as i64 * 2)
@@ -63,7 +61,9 @@ async fn run_check_cycle_inner(
     let db = db.clone();
     let timeout = std::time::Duration::from_secs(checker_cfg.timeout_secs);
     let targets: Arc<[String]> = checker_cfg.targets.clone().into();
-    let scoring_cfg = Arc::new(scoring_cfg.clone());
+
+    // Get the max success count across all proxies for relative scoring
+    let max_success_count = db.get_max_success_count().await.unwrap_or(0);
 
     let mut handles = Vec::new();
 
@@ -71,10 +71,9 @@ async fn run_check_cycle_inner(
         let permit = semaphore.clone().acquire_owned().await?;
         let db = db.clone();
         let targets = targets.clone();
-        let scoring_cfg = scoring_cfg.clone();
 
         let handle = tokio::spawn(async move {
-            let result = check_single_proxy(&db, &proxy, &targets, timeout, &scoring_cfg).await;
+            let result = check_single_proxy(&db, &proxy, &targets, timeout, max_success_count).await;
             drop(permit);
             result
         });
@@ -110,7 +109,7 @@ async fn check_single_proxy(
     proxy: &Proxy,
     targets: &[String],
     timeout: std::time::Duration,
-    scoring_cfg: &ScoringConfig,
+    max_success_count: i64,
 ) -> Result<bool> {
     let proxy_addr = format!("{}:{}", proxy.ip, proxy.port);
 
@@ -200,7 +199,7 @@ async fn check_single_proxy(
         .await?;
 
     // Recalculate score
-    let score = calculate_score(proxy, any_success, avg_latency, scoring_cfg);
+    let score = calculate_score(proxy, any_success, avg_latency, max_success_count);
     db.update_proxy_score(proxy.id, score).await?;
 
     // Detect metadata from response if successful, reusing the proxy client
@@ -252,50 +251,79 @@ fn calculate_next_check(proxy: &Proxy, success: bool) -> chrono::NaiveDateTime {
 }
 
 /// Calculate health score (0-100)
-///   Success rate:  50 pts (0-100% maps to 0-50)
-///   Success count: 10 pts (capped at 10 successes)
-///   Country:       10 pts (known=10, unknown=0)
-///   Latency:       30 pts (<=50ms=30, >=10000ms=0, linear scale)
+///   Success rate:   60 pts  (rate × 60)
+///   Success count:  10 pts  (60% of max_success_count → full score)
+///   Country:         6 pts  (tier-based ranking)
+///   Proxy type:      4 pts  (more secure = higher)
+///   Latency:        20 pts  (≤100ms=20, ≥5000ms=0, linear)
 fn calculate_score(
     proxy: &Proxy,
     current_success: bool,
     avg_latency: Option<f64>,
-    _cfg: &ScoringConfig,
+    max_success_count: i64,
 ) -> f64 {
     let total_checks = proxy.success_count + proxy.fail_count + 1;
     let successes = proxy.success_count + if current_success { 1 } else { 0 };
 
-    // Success rate component (0-50)
+    // Success rate component (0-60)
     let rate = successes as f64 / total_checks as f64;
-    let success_rate_score = rate * 50.0;
+    let success_rate_score = rate * 60.0;
 
-    // Success count component (0-10), capped at 10 successes
-    let success_count_score = (successes as f64).min(10.0);
-
-    // Country component (0-10): known country = 10, unknown = 0
-    let country_score = if proxy.country == "unknown" || proxy.country.is_empty() {
-        0.0
+    // Success count component (0-10): 60% of the top proxy's count = full 10
+    let success_count_score = if max_success_count > 0 {
+        let threshold = (max_success_count as f64 * 0.6).max(1.0);
+        ((successes as f64 / threshold) * 10.0).min(10.0)
     } else {
-        10.0
+        0.0
     };
 
-    // Latency component (0-30): <=50ms = 30, >=10000ms = 0, linear between
+    // Country component (0-6): tiered ranking
+    let country_score = country_tier_score(&proxy.country);
+
+    // Proxy type component (0-4): more secure = higher
+    let type_score = match proxy.protocol.as_str() {
+        "socks5" => 4.0,  // most versatile & secure
+        "https"  => 3.0,
+        "socks4" => 2.0,
+        "http"   => 1.0,
+        _        => 0.0,
+    };
+
+    // Latency component (0-20): ≤100ms = 20, ≥5000ms = 0, linear between
     let latency_score = match avg_latency.or(Some(proxy.avg_latency_ms)) {
         Some(ms) if ms > 0.0 => {
-            if ms <= 50.0 {
-                30.0
-            } else if ms >= 10000.0 {
+            if ms <= 100.0 {
+                20.0
+            } else if ms >= 5000.0 {
                 0.0
             } else {
-                // Linear: 30 * (10000 - ms) / (10000 - 50)
-                30.0 * (10000.0 - ms) / 9950.0
+                20.0 * (5000.0 - ms) / 4900.0
             }
         }
-        _ => 0.0, // Unknown latency = 0
+        _ => 0.0,
     };
 
-    let score = success_rate_score + success_count_score + country_score + latency_score;
+    let score = success_rate_score + success_count_score + country_score + type_score + latency_score;
     score.clamp(0.0, 100.0)
+}
+
+/// Country tier scoring (0-6)
+fn country_tier_score(country: &str) -> f64 {
+    if country == "unknown" || country.is_empty() {
+        return 0.0;
+    }
+    // Tier 1 (6 pts): major datacenter / premium regions
+    const TIER1: &[&str] = &["US", "GB", "DE", "JP", "SG", "NL", "CA", "AU", "FR", "SE", "CH", "IE", "FI", "NO", "DK"];
+    // Tier 2 (4.5 pts): solid infrastructure countries
+    const TIER2: &[&str] = &["KR", "TW", "HK", "IT", "ES", "BR", "IN", "PL", "CZ", "RO", "AT", "BE", "NZ", "IL", "ZA"];
+    // Tier 3 (3 pts): decent regions
+    const TIER3: &[&str] = &["RU", "UA", "TR", "MX", "AR", "CL", "CO", "TH", "VN", "ID", "PH", "MY", "PT", "GR", "HU", "BG"];
+    let code = country.to_uppercase();
+    let c = code.as_str();
+    if TIER1.contains(&c) { 6.0 }
+    else if TIER2.contains(&c) { 4.5 }
+    else if TIER3.contains(&c) { 3.0 }
+    else { 1.5 } // known but unlisted country
 }
 
 /// Try to detect proxy metadata (anonymity, protocol detection)

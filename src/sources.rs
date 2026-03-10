@@ -1,7 +1,6 @@
 use anyhow::Result;
 use tracing::{info, warn};
 
-use crate::config::ProviderConfig;
 use crate::db::Database;
 
 /// Parsed proxy entry from a source
@@ -10,51 +9,6 @@ pub struct RawProxy {
     pub ip: String,
     pub port: u16,
     pub protocol: String,
-}
-
-/// Synchronize all configured proxy sources
-pub async fn sync_sources(db: &Database, providers: &[ProviderConfig]) -> Result<usize> {
-    let mut total = 0;
-
-    for provider in providers {
-        match provider.provider_type.as_str() {
-            "file" => {
-                if let Some(path) = &provider.path {
-                    match load_from_file(path).await {
-                        Ok(proxies) => {
-                            let count = import_proxies(db, &proxies, &format!("file:{}", path)).await?;
-                            info!(source = %path, count = count, "Synced file source");
-                            total += count;
-                        }
-                        Err(e) => warn!(source = %path, error = %e, "Failed to load file source"),
-                    }
-                }
-            }
-            "url" => {
-                if let Some(url) = &provider.url {
-                    match load_from_url(url).await {
-                        Ok(proxies) => {
-                            let count = import_proxies(db, &proxies, &format!("url:{}", url)).await?;
-                            info!(source = %url, count = count, "Synced URL source");
-                            total += count;
-                        }
-                        Err(e) => warn!(source = %url, error = %e, "Failed to load URL source"),
-                    }
-                }
-            }
-            other => {
-                warn!(provider_type = %other, "Unknown provider type, skipping");
-            }
-        }
-    }
-
-    Ok(total)
-}
-
-/// Load proxies from a local file
-async fn load_from_file(path: &str) -> Result<Vec<RawProxy>> {
-    let content = tokio::fs::read_to_string(path).await?;
-    Ok(parse_proxy_list(&content))
 }
 
 /// Load proxies from a remote URL
@@ -137,17 +91,6 @@ fn parse_proxy_line(line: &str) -> Option<RawProxy> {
     }
 
     None
-}
-
-/// Import parsed proxies into the database (deduplication via upsert)
-pub async fn import_proxies(db: &Database, proxies: &[RawProxy], source: &str) -> Result<usize> {
-    let mut count = 0;
-    for proxy in proxies {
-        db.upsert_proxy(&proxy.ip, proxy.port, &proxy.protocol, source)
-            .await?;
-        count += 1;
-    }
-    Ok(count)
 }
 
 /// Import proxies with an explicit protocol hint override

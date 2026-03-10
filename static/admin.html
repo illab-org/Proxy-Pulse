@@ -618,6 +618,12 @@
                 </svg>
                 <span data-i18n="admin.tab_users">User Management</span>
             </button>
+            <button class="admin-tab" data-tab="checker">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:middle;margin-right:6px;">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                <span data-i18n="admin.tab_checker">Checker Settings</span>
+            </button>
         </div>
 
         <!-- ═══ Tab: Proxy Management ═══ -->
@@ -781,6 +787,57 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+
+        <!-- ═══ Checker Settings Panel ═══ -->
+        <div class="tab-panel" id="panel-checker">
+            <div class="admin-section">
+                <div class="admin-section-header">
+                    <div class="admin-section-title">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                        <span data-i18n="admin.checker_settings">Checker Settings</span>
+                    </div>
+                    <button class="btn btn-outline btn-sm" onclick="loadCheckerSettings()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+                            <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+                        </svg>
+                        <span data-i18n="common.refresh">Refresh</span>
+                    </button>
+                </div>
+                <form id="checkerSettingsForm" onsubmit="saveCheckerSettings(event)" style="max-width:600px;">
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="admin.checker_interval">Check Interval (seconds)</label>
+                        <input type="number" class="form-input" id="checkerInterval" min="10" max="86400" required>
+                        <div class="form-hint" data-i18n="admin.checker_interval_hint">How often proxies are checked (10–86400 seconds)</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="admin.checker_timeout">Request Timeout (seconds)</label>
+                        <input type="number" class="form-input" id="checkerTimeout" min="1" max="120" required>
+                        <div class="form-hint" data-i18n="admin.checker_timeout_hint">Timeout per proxy check request (1–120 seconds)</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="admin.checker_concurrent">Max Concurrent Checks</label>
+                        <input type="number" class="form-input" id="checkerConcurrent" min="1" max="10000" required>
+                        <div class="form-hint" data-i18n="admin.checker_concurrent_hint">Maximum number of simultaneous proxy checks (1–10000)</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="admin.checker_targets">Check Targets</label>
+                        <textarea class="form-textarea" id="checkerTargets" rows="4" required
+                            placeholder="https://httpbin.org/ip&#10;https://ifconfig.me/ip"></textarea>
+                        <div class="form-hint" data-i18n="admin.checker_targets_hint">URLs used to verify proxy connectivity (one per line)</div>
+                    </div>
+                    <div style="display:flex;gap:10px;margin-top:20px;">
+                        <button type="submit" class="btn btn-primary" id="saveCheckerBtn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+                                <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+                            </svg>
+                            <span data-i18n="common.save">Save</span>
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </main>
@@ -1127,6 +1184,7 @@
         loadProxies();
         loadSources();
         loadUsers();
+        loadCheckerSettings();
         // Re-render dynamic content when locale changes
         I18N.onChange(() => {
             loadProxies();
@@ -1649,6 +1707,57 @@
                 loadUsers();
             } else {
                 showToast(json.error || 'Failed to update user', 'error');
+            }
+        } catch(e) {
+            showToast('Error: ' + e.message, 'error');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    // ═══════════════════════════════════
+    //  Checker Settings
+    // ═══════════════════════════════════
+
+    async function loadCheckerSettings() {
+        try {
+            const resp = await authFetch('/api/v1/admin/settings/checker');
+            const json = await resp.json();
+            if (json.success) {
+                const cfg = json.data;
+                document.getElementById('checkerInterval').value = cfg.interval_secs;
+                document.getElementById('checkerTimeout').value = cfg.timeout_secs;
+                document.getElementById('checkerConcurrent').value = cfg.max_concurrent;
+                document.getElementById('checkerTargets').value = (cfg.targets || []).join('\n');
+            }
+        } catch(e) {
+            showToast('Failed to load checker settings', 'error');
+        }
+    }
+
+    async function saveCheckerSettings(e) {
+        e.preventDefault();
+        const btn = document.getElementById('saveCheckerBtn');
+        btn.disabled = true;
+        try {
+            const targets = document.getElementById('checkerTargets').value
+                .split('\n').map(s => s.trim()).filter(s => s.length > 0);
+            const body = {
+                interval_secs: parseInt(document.getElementById('checkerInterval').value),
+                timeout_secs: parseInt(document.getElementById('checkerTimeout').value),
+                max_concurrent: parseInt(document.getElementById('checkerConcurrent').value),
+                targets: targets,
+            };
+            const resp = await authFetch('/api/v1/admin/settings/checker', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const json = await resp.json();
+            if (json.success) {
+                showToast(I18N.t('admin.checker_saved') || 'Checker settings saved', 'success');
+            } else {
+                showToast(json.error || 'Failed to save settings', 'error');
             }
         } catch(e) {
             showToast('Error: ' + e.message, 'error');

@@ -7,15 +7,12 @@ pub use proxy::proxy_api_router;
 use axum::http::StatusCode;
 use axum::response::Json;
 use serde::Serialize;
-use std::sync::Arc;
 
-use crate::config::AppConfig;
 use crate::db::Database;
 
 /// Shared application state
 pub struct AppState {
     pub db: Database,
-    pub config: Arc<AppConfig>,
     pub demo_mode: bool,
 }
 

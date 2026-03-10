@@ -8,6 +8,8 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use std::str::FromStr;
 use tracing::info;
 
+use crate::config::CheckerConfig;
+
 #[derive(Clone)]
 pub struct Database {
     pub pool: SqlitePool,
@@ -218,12 +220,72 @@ impl Database {
             .execute(&self.pool)
             .await;
 
+        // System settings table (key-value store for checker config etc.)
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS system_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
         // Repair broken check_logs FK from previous migrations (SQLite 3.26+ bug)
         self.repair_check_logs_fk().await?;
 
         // Migration: change UNIQUE(ip, port) → UNIQUE(ip, port, protocol)
         self.migrate_proxy_unique_constraint().await?;
 
+        Ok(())
+    }
+
+    // ── System Settings ──
+
+    pub async fn get_setting(&self, key: &str) -> Result<Option<String>> {
+        let row: Option<(String,)> = sqlx::query_as(
+            "SELECT value FROM system_settings WHERE key = ?",
+        )
+        .bind(key)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|r| r.0))
+    }
+
+    pub async fn set_setting(&self, key: &str, value: &str) -> Result<()> {
+        sqlx::query(
+            "INSERT INTO system_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        )
+        .bind(key)
+        .bind(value)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get_checker_config(&self) -> CheckerConfig {
+        let interval = self.get_setting("checker.interval_secs").await
+            .ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(60);
+        let timeout = self.get_setting("checker.timeout_secs").await
+            .ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(10);
+        let max_concurrent = self.get_setting("checker.max_concurrent").await
+            .ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(200);
+        let targets = self.get_setting("checker.targets").await
+            .ok().flatten()
+            .map(|v| serde_json::from_str(&v).unwrap_or_default())
+            .unwrap_or_else(|| vec![
+                "https://httpbin.org/ip".to_string(),
+                "https://www.cloudflare.com/cdn-cgi/trace".to_string(),
+            ]);
+        CheckerConfig { interval_secs: interval, timeout_secs: timeout, max_concurrent, targets }
+    }
+
+    pub async fn save_checker_config(&self, cfg: &CheckerConfig) -> Result<()> {
+        self.set_setting("checker.interval_secs", &cfg.interval_secs.to_string()).await?;
+        self.set_setting("checker.timeout_secs", &cfg.timeout_secs.to_string()).await?;
+        self.set_setting("checker.max_concurrent", &cfg.max_concurrent.to_string()).await?;
+        self.set_setting("checker.targets", &serde_json::to_string(&cfg.targets)?).await?;
         Ok(())
     }
 

@@ -11,8 +11,6 @@ REPO="OpenInfra-Labs/Proxy-Pulse"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT_PATH="$SCRIPT_DIR/$(basename "$0")"
 PID_FILE="$SCRIPT_DIR/.proxy-pulse.pid"
-CONFIG_FILE="$SCRIPT_DIR/config.yaml"
-CONFIG_EXAMPLE="$SCRIPT_DIR/config.example.yaml"
 VERSION_FILE="$SCRIPT_DIR/.proxy-pulse.version"
 
 # ─── Detect platform ───
@@ -106,14 +104,6 @@ download_binary() {
     echo "Binary installed: $BINARY (${version})"
 }
 
-# ─── Download config.example.yaml from repo ───
-download_config_example() {
-    echo "Downloading config.example.yaml..."
-    curl -fsSL -o "$CONFIG_EXAMPLE" \
-        "https://raw.githubusercontent.com/${REPO}/main/config.example.yaml"
-    echo "Config template downloaded: $CONFIG_EXAMPLE"
-}
-
 # ─── Check and update binary if a newer version is available ───
 check_binary_update() {
     local latest_version
@@ -141,17 +131,6 @@ check_binary_update() {
     fi
 }
 
-# ─── Ensure config exists ───
-ensure_config() {
-    if [ ! -f "$CONFIG_EXAMPLE" ]; then
-        download_config_example
-    fi
-    if [ ! -f "$CONFIG_FILE" ]; then
-        cp "$CONFIG_EXAMPLE" "$CONFIG_FILE"
-        echo "Config: created config.yaml from config.example.yaml (default settings)."
-    fi
-}
-
 # ─── Open browser if possible ───
 open_browser() {
     local url="$1"
@@ -171,17 +150,6 @@ open_browser() {
         return 0
     fi
     echo "Browser opened: $url"
-}
-
-# ─── Read port from config.yaml ───
-get_server_port() {
-    if [ -f "$CONFIG_FILE" ]; then
-        local port
-        port=$(grep -E '^\s+port:' "$CONFIG_FILE" | head -1 | sed 's/.*port: *\([0-9]*\).*/\1/')
-        echo "${port:-8080}"
-    else
-        echo "8080"
-    fi
 }
 
 # ─── Stop ───
@@ -235,9 +203,6 @@ start_service() {
     # Check for binary updates (download or upgrade)
     check_binary_update
 
-    # Ensure config
-    ensure_config
-
     # Stop old process if it was running
     if [ "$was_running" = true ]; then
         stop_service
@@ -258,7 +223,7 @@ start_service() {
     # Auto-open browser (only on fresh start)
     if [ "$was_running" = false ]; then
         local port
-        port="$(get_server_port)"
+        port="${PORT:-8080}"
         sleep 1
         open_browser "http://localhost:${port}"
     fi

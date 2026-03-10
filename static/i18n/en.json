@@ -199,7 +199,18 @@
         "user_deleted": "User deleted",
         "confirm_delete_user": "Delete user",
         "edit_user": "Edit User",
-        "user_updated": "User updated"
+        "user_updated": "User updated",
+        "tab_checker": "Checker Settings",
+        "checker_settings": "Checker Settings",
+        "checker_interval": "Check Interval (seconds)",
+        "checker_interval_hint": "How often proxies are checked (10–86400 seconds)",
+        "checker_timeout": "Request Timeout (seconds)",
+        "checker_timeout_hint": "Timeout per proxy check request (1–120 seconds)",
+        "checker_concurrent": "Max Concurrent Checks",
+        "checker_concurrent_hint": "Maximum number of simultaneous proxy checks (1–10000)",
+        "checker_targets": "Check Targets",
+        "checker_targets_hint": "URLs used to verify proxy connectivity (one per line)",
+        "checker_saved": "Checker settings saved"
     },
     "lang": {
         "en": "English",

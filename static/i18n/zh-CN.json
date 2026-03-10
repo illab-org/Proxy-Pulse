@@ -199,7 +199,18 @@
         "user_deleted": "用户已删除",
         "confirm_delete_user": "删除用户",
         "edit_user": "编辑用户",
-        "user_updated": "用户已更新"
+        "user_updated": "用户已更新",
+        "tab_checker": "检测设置",
+        "checker_settings": "检测设置",
+        "checker_interval": "检测间隔（秒）",
+        "checker_interval_hint": "代理检测频率（10–86400 秒）",
+        "checker_timeout": "请求超时（秒）",
+        "checker_timeout_hint": "单次代理检测请求的超时时间（1–120 秒）",
+        "checker_concurrent": "最大并发数",
+        "checker_concurrent_hint": "同时进行代理检测的最大数量（1–10000）",
+        "checker_targets": "检测目标",
+        "checker_targets_hint": "用于验证代理连通性的 URL（每行一个）",
+        "checker_saved": "检测设置已保存"
     },
     "lang": {
         "en": "English",

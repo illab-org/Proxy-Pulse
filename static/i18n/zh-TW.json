@@ -198,7 +198,18 @@
         "user_deleted": "使用者已刪除",
         "confirm_delete_user": "刪除使用者",
         "edit_user": "編輯用戶",
-        "user_updated": "用戶已更新"
+        "user_updated": "用戶已更新",
+        "tab_checker": "檢測設定",
+        "checker_settings": "檢測設定",
+        "checker_interval": "檢測間隔（秒）",
+        "checker_interval_hint": "代理檢測頻率（10–86400 秒）",
+        "checker_timeout": "請求逾時（秒）",
+        "checker_timeout_hint": "單次代理檢測請求的逾時時間（1–120 秒）",
+        "checker_concurrent": "最大並行數",
+        "checker_concurrent_hint": "同時進行代理檢測的最大數量（1–10000）",
+        "checker_targets": "檢測目標",
+        "checker_targets_hint": "用於驗證代理連通性的 URL（每行一個）",
+        "checker_saved": "檢測設定已儲存"
     },
     "lang": {
         "en": "English",

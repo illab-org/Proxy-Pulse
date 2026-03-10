@@ -199,7 +199,18 @@
         "user_deleted": "ユーザーが削除されました",
         "confirm_delete_user": "ユーザーを削除",
         "edit_user": "ユーザー編集",
-        "user_updated": "ユーザーが更新されました"
+        "user_updated": "ユーザーが更新されました",
+        "tab_checker": "チェッカー設定",
+        "checker_settings": "チェッカー設定",
+        "checker_interval": "チェック間隔（秒）",
+        "checker_interval_hint": "プロキシのチェック頻度（10–86400 秒）",
+        "checker_timeout": "リクエストタイムアウト（秒）",
+        "checker_timeout_hint": "プロキシチェックリクエストのタイムアウト（1–120 秒）",
+        "checker_concurrent": "最大同時チェック数",
+        "checker_concurrent_hint": "同時に実行するプロキシチェックの最大数（1–10000）",
+        "checker_targets": "チェック対象",
+        "checker_targets_hint": "プロキシの接続確認に使用する URL（1行に1つ）",
+        "checker_saved": "チェッカー設定が保存されました"
     },
     "lang": {
         "en": "English",
