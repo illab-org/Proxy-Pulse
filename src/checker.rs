@@ -1,5 +1,6 @@
 use anyhow::Result;
 use chrono::{Duration, Utc};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 use tokio::sync::Semaphore;
 use tracing::{debug, info, warn};
@@ -8,6 +9,9 @@ use std::sync::Arc;
 use crate::config::{CheckerConfig, ScoringConfig};
 use crate::db::Database;
 use crate::models::Proxy;
+
+/// Guard to prevent concurrent check cycles
+static CHECK_RUNNING: AtomicBool = AtomicBool::new(false);
 
 /// Shared direct HTTP client (not proxied) for GeoIP lookups etc.
 static DIRECT_CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
@@ -25,6 +29,21 @@ fn direct_client() -> &'static reqwest::Client {
 
 /// Run a check cycle: fetch due proxies and check them
 pub async fn run_check_cycle(
+    db: &Database,
+    checker_cfg: &CheckerConfig,
+    scoring_cfg: &ScoringConfig,
+) -> Result<(usize, usize)> {
+    // Prevent concurrent check cycles from overlapping
+    if CHECK_RUNNING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        info!("Check cycle already running, skipping");
+        return Ok((0, 0));
+    }
+    let result = run_check_cycle_inner(db, checker_cfg, scoring_cfg).await;
+    CHECK_RUNNING.store(false, Ordering::SeqCst);
+    result
+}
+
+async fn run_check_cycle_inner(
     db: &Database,
     checker_cfg: &CheckerConfig,
     scoring_cfg: &ScoringConfig,
@@ -95,15 +114,33 @@ async fn check_single_proxy(
 ) -> Result<bool> {
     let proxy_addr = format!("{}:{}", proxy.ip, proxy.port);
 
+    // Build the reqwest::Client ONCE per proxy, reuse across all targets
+    let proxy_url = match proxy.protocol.as_str() {
+        "socks5" => format!("socks5://{}", proxy_addr),
+        "socks4" => format!("socks5://{}", proxy_addr),
+        "https" => format!("https://{}", proxy_addr),
+        _ => format!("http://{}", proxy_addr),
+    };
+    let req_proxy = reqwest::Proxy::all(&proxy_url)?;
+    let client = Arc::new(
+        reqwest::Client::builder()
+            .proxy(req_proxy)
+            .timeout(timeout)
+            .danger_accept_invalid_certs(true)
+            .pool_max_idle_per_host(0)
+            .tcp_nodelay(true)
+            .redirect(reqwest::redirect::Policy::limited(3))
+            .build()?,
+    );
+
     // Check all targets in parallel to minimize per-proxy check time
     let mut target_handles = Vec::new();
     for target in targets {
-        let addr = proxy_addr.clone();
-        let protocol = proxy.protocol.clone();
+        let client = client.clone();
         let t = target.clone();
         let handle = tokio::spawn(async move {
             let start = Instant::now();
-            let result = check_proxy_against_target(&addr, &protocol, &t, timeout).await;
+            let result = check_with_client(&client, &t).await;
             let elapsed = start.elapsed().as_millis() as f64;
             (t, result, elapsed)
         });
@@ -166,44 +203,21 @@ async fn check_single_proxy(
     let score = calculate_score(proxy, any_success, avg_latency, scoring_cfg);
     db.update_proxy_score(proxy.id, score).await?;
 
-    // Detect metadata from response if successful
+    // Detect metadata from response if successful, reusing the proxy client
     if any_success {
-        detect_and_update_metadata(db, proxy).await.ok();
+        detect_and_update_metadata(db, proxy, &client).await.ok();
     }
+
+    // Explicitly drop client to free TLS context and connection pool
+    drop(client);
 
     Ok(any_success)
 }
 
-/// Check a proxy against a single target URL
-async fn check_proxy_against_target(
-    proxy_addr: &str,
-    protocol: &str,
-    target: &str,
-    timeout: std::time::Duration,
-) -> Result<()> {
-    let proxy_url = match protocol {
-        "socks5" => format!("socks5://{}", proxy_addr),
-        "socks4" => format!("socks5://{}", proxy_addr), // reqwest uses socks5 for both
-        "https" => format!("https://{}", proxy_addr),
-        _ => format!("http://{}", proxy_addr),
-    };
-
-    let proxy = reqwest::Proxy::all(&proxy_url)?;
-    let client = reqwest::Client::builder()
-        .proxy(proxy)
-        .timeout(timeout)
-        .danger_accept_invalid_certs(true)
-        .pool_max_idle_per_host(0)
-        .tcp_nodelay(true)
-        .redirect(reqwest::redirect::Policy::limited(3))
-        .build()?;
-
+/// Check a proxy against a single target URL using a shared client
+async fn check_with_client(client: &reqwest::Client, target: &str) -> Result<()> {
     let resp = client.get(target).send().await?;
-    drop(client); // Eagerly release connection pool memory
-
-    // Only check status — don't read the full response body to save memory
     let status = resp.status();
-    // Drop response (and its buffers) immediately
     drop(resp);
 
     if status.is_success() || status.is_redirection() {
@@ -286,12 +300,10 @@ fn calculate_score(
 
 /// Try to detect proxy metadata (anonymity, protocol detection)
 /// Only runs for proxies that still have unknown metadata to avoid redundant work.
-async fn detect_and_update_metadata(db: &Database, proxy: &Proxy) -> Result<()> {
-    let proxy_addr = format!("{}:{}", proxy.ip, proxy.port);
-
+async fn detect_and_update_metadata(db: &Database, proxy: &Proxy, client: &reqwest::Client) -> Result<()> {
     // Skip anonymity redetection if already known
     let anonymity = if proxy.anonymity == "unknown" {
-        detect_anonymity(&proxy_addr, &proxy.protocol).await
+        detect_anonymity(client).await
             .unwrap_or_else(|_| "unknown".to_string())
     } else {
         proxy.anonymity.clone()
@@ -317,17 +329,7 @@ async fn detect_and_update_metadata(db: &Database, proxy: &Proxy) -> Result<()> 
     Ok(())
 }
 
-async fn detect_anonymity(proxy_addr: &str, protocol: &str) -> Result<String> {
-    let proxy_url = format!("{}://{}", protocol, proxy_addr);
-    let proxy = reqwest::Proxy::all(&proxy_url)?;
-
-    let client = reqwest::Client::builder()
-        .proxy(proxy)
-        .timeout(std::time::Duration::from_secs(10))
-        .danger_accept_invalid_certs(true)
-        .pool_max_idle_per_host(0)
-        .build()?;
-
+async fn detect_anonymity(client: &reqwest::Client) -> Result<String> {
     let resp = client
         .get("https://httpbin.org/headers")
         .send()

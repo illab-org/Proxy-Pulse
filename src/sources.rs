@@ -65,7 +65,13 @@ async fn load_from_url(url: &str) -> Result<Vec<RawProxy>> {
         .build()?;
 
     let resp = client.get(url).send().await?;
-    let content = resp.text().await?;
+
+    // Cap body at 10MB to avoid OOM on unexpectedly large responses
+    let bytes = resp.bytes().await?;
+    if bytes.len() > 10 * 1024 * 1024 {
+        anyhow::bail!("Response too large: {} bytes", bytes.len());
+    }
+    let content = String::from_utf8_lossy(&bytes);
     Ok(parse_proxy_list(&content))
 }
 
