@@ -46,6 +46,7 @@ axum-extra = { version = "0.9", features = ["cookie"] }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.6"
+tikv-jemalloc-ctl = { version = "0.6", features = ["stats"] }
 
 [profile.release]
 lto = true

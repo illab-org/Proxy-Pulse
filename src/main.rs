@@ -4,6 +4,7 @@ mod checker;
 mod config;
 mod db;
 mod models;
+mod mem_monitor;
 mod scheduler;
 mod sources;
 
@@ -65,6 +66,10 @@ async fn main() -> anyhow::Result<()> {
     // Start background schedulers
     scheduler::start_schedulers(db, config.clone()).await;
     info!("Background schedulers started");
+
+    // Start memory monitor (logs every 1 second)
+    mem_monitor::spawn_monitor(1);
+    info!("Memory monitor started (1s interval)");
 
     // Build application router
     //
