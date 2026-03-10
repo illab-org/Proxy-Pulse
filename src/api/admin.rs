@@ -8,11 +8,13 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tracing::info;
 
 use super::{demo_guard, ApiResponse, AppState, ErrorResponse};
 use crate::db::Database;
 use crate::models::{ProxyAdminResponse, SubscriptionSourceResponse};
 use crate::sources;
+use crate::updater;
 
 #[derive(Debug, Deserialize)]
 pub struct AdminProxyListParams {
@@ -98,6 +100,9 @@ pub fn admin_api_router() -> Router<Arc<AppState>> {
         .route("/api/v1/admin/settings/system", post(admin_save_system_settings))
         .route("/api/v1/admin/db/export", get(admin_export_db))
         .route("/api/v1/admin/db/import", post(admin_import_db))
+        .route("/api/v1/admin/update/check", get(admin_check_update))
+        .route("/api/v1/admin/update/releases", get(admin_get_releases))
+        .route("/api/v1/admin/update/trigger", post(admin_trigger_update))
 }
 
 async fn admin_get_proxies(
@@ -589,5 +594,60 @@ async fn admin_import_db(
     Ok(Json(serde_json::json!({
         "success": true,
         "data": { "message": "Database imported. The service will restart automatically." }
+    })))
+}
+
+async fn admin_check_update() -> Json<serde_json::Value> {
+    let current = env!("CARGO_PKG_VERSION");
+    match updater::fetch_latest_version().await {
+        Ok(tag) => {
+            let latest = tag.trim_start_matches('v');
+            let update_available = updater::is_newer(latest, current);
+            Json(serde_json::json!({
+                "success": true,
+                "data": {
+                    "current_version": current,
+                    "latest_version": latest,
+                    "update_available": update_available,
+                }
+            }))
+        }
+        Err(e) => Json(serde_json::json!({
+            "success": false,
+            "error": format!("Failed to check for updates: {}", e),
+        })),
+    }
+}
+
+async fn admin_get_releases() -> Json<serde_json::Value> {
+    match updater::fetch_releases().await {
+        Ok(releases) => Json(serde_json::json!({
+            "success": true,
+            "data": releases,
+        })),
+        Err(e) => Json(serde_json::json!({
+            "success": false,
+            "error": format!("Failed to fetch releases: {}", e),
+        })),
+    }
+}
+
+async fn admin_trigger_update(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
+    demo_guard(&state)?;
+
+    tokio::spawn(async {
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        match updater::check_and_update().await {
+            Ok(true) => info!("Manual update triggered successfully"),
+            Ok(false) => info!("No update available"),
+            Err(e) => tracing::error!(error = %e, "Manual update failed"),
+        }
+    });
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "data": { "message": "Update triggered. The service will restart automatically." }
     })))
 }

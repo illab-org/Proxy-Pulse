@@ -37,7 +37,7 @@ pub fn spawn_auto_updater(db: Database) {
 }
 
 /// Check GitHub for a newer version and trigger update if available
-async fn check_and_update() -> anyhow::Result<bool> {
+pub async fn check_and_update() -> anyhow::Result<bool> {
     let current_version = env!("CARGO_PKG_VERSION");
     let latest_tag = fetch_latest_version().await?;
     let latest_version = latest_tag.trim_start_matches('v');
@@ -80,7 +80,7 @@ async fn check_and_update() -> anyhow::Result<bool> {
 }
 
 /// Fetch the latest release tag from GitHub API
-async fn fetch_latest_version() -> anyhow::Result<String> {
+pub async fn fetch_latest_version() -> anyhow::Result<String> {
     let url = format!(
         "https://api.github.com/repos/{}/releases/latest",
         REPO
@@ -100,8 +100,38 @@ async fn fetch_latest_version() -> anyhow::Result<String> {
         .ok_or_else(|| anyhow::anyhow!("No tag_name in GitHub response"))
 }
 
+/// Fetch all releases from GitHub API (tag, date, body)
+pub async fn fetch_releases() -> anyhow::Result<Vec<serde_json::Value>> {
+    let url = format!(
+        "https://api.github.com/repos/{}/releases?per_page=50",
+        REPO
+    );
+
+    let client = reqwest::Client::builder()
+        .user_agent("Proxy-Pulse-Updater")
+        .timeout(std::time::Duration::from_secs(15))
+        .build()?;
+
+    let resp = client.get(&url).send().await?;
+    let releases: Vec<serde_json::Value> = resp.json().await?;
+
+    Ok(releases
+        .into_iter()
+        .filter_map(|r| {
+            let tag = r.get("tag_name")?.as_str()?.to_string();
+            let date = r.get("published_at")?.as_str()?.to_string();
+            let body = r.get("body").and_then(|b| b.as_str()).unwrap_or("").to_string();
+            Some(serde_json::json!({
+                "version": tag,
+                "date": date,
+                "notes": body,
+            }))
+        })
+        .collect())
+}
+
 /// Compare two semver strings, return true if `latest` > `current`
-fn is_newer(latest: &str, current: &str) -> bool {
+pub fn is_newer(latest: &str, current: &str) -> bool {
     let parse = |v: &str| -> (u32, u32, u32) {
         let parts: Vec<u32> = v.split('.').filter_map(|p| p.parse().ok()).collect();
         (
