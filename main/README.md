@@ -40,14 +40,7 @@ git clone https://github.com/OpenInfra-Labs/Proxy-Pulse.git
 cd Proxy-Pulse
 ```
 
-### 2. Configure
-
-```bash
-cp config.example.yaml config.yaml
-# Edit config.yaml as needed
-```
-
-### 3. Run
+### 2. Run
 
 ```bash
 # Start (auto-detects your OS and architecture)
@@ -60,7 +53,12 @@ cp config.example.yaml config.yaml
 ./run stop
 ```
 
-The `run` script automatically selects the correct binary for your platform from the `build/` directory and starts it in the background.
+The `run` script automatically:
+- Detects your OS and CPU architecture, selects the correct binary from `build/`
+- Creates `config.yaml` from `config.example.yaml` on first run (if not already present)
+- Starts the service in the background
+
+To customize settings, edit `config.yaml` before or after starting.
 
 ### 4. Access
 

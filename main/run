@@ -88,13 +88,11 @@ start_service() {
         chmod +x "$binary_path"
     fi
 
-    # Copy config.example.yaml to config.yaml if not exists
+    # Auto-create config.yaml from example if not exists
     if [ ! -f "$SCRIPT_DIR/config.yaml" ]; then
         if [ -f "$SCRIPT_DIR/config.example.yaml" ]; then
             cp "$SCRIPT_DIR/config.example.yaml" "$SCRIPT_DIR/config.yaml"
-            echo "Created config.yaml from config.example.yaml — edit it before first use."
-        else
-            echo "Warning: no config.yaml or config.example.yaml found." >&2
+            echo "Config: created config.yaml from config.example.yaml (default settings)."
         fi
     fi
 

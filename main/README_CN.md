@@ -40,14 +40,7 @@ git clone https://github.com/OpenInfra-Labs/Proxy-Pulse.git
 cd Proxy-Pulse
 ```
 
-### 2. 配置
-
-```bash
-cp config.example.yaml config.yaml
-# 根据需要编辑 config.yaml
-```
-
-### 3. 运行
+### 2. 运行
 
 ```bash
 # 启动（自动检测当前系统和架构）
@@ -60,7 +53,12 @@ cp config.example.yaml config.yaml
 ./run stop
 ```
 
-`run` 脚本会自动从 `build/` 目录中选择适合当前平台的二进制文件，并在后台启动。
+`run` 脚本会自动：
+- 检测当前操作系统和 CPU 架构，从 `build/` 中选择对应的二进制文件
+- 首次运行时自动从 `config.example.yaml` 生成 `config.yaml`（如不存在）
+- 在后台启动服务
+
+如需自定义配置，可在启动前后编辑 `config.yaml`。
 
 ### 4. 访问
 
