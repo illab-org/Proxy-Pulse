@@ -528,6 +528,308 @@
         [data-theme="light"] .modal {
             box-shadow: 0 20px 60px rgba(0,0,0,0.15);
         }
+
+        /* ─── Update Page ─── */
+        .update-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        @media (max-width: 768px) {
+            .update-grid { grid-template-columns: 1fr; }
+        }
+        .update-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 24px;
+            backdrop-filter: blur(16px);
+            position: relative;
+            overflow: hidden;
+        }
+        .update-card-accent {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: var(--gradient-primary);
+            border-radius: var(--radius) var(--radius) 0 0;
+        }
+        .update-card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .update-card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .update-card-icon svg {
+            width: 20px;
+            height: 20px;
+        }
+        .update-card-icon.icon-version {
+            background: linear-gradient(135deg, rgba(0,240,255,0.15), rgba(123,97,255,0.15));
+            color: var(--accent-cyan);
+            border: 1px solid rgba(0,240,255,0.2);
+        }
+        .update-card-icon.icon-status {
+            background: linear-gradient(135deg, rgba(0,230,138,0.15), rgba(0,180,216,0.15));
+            color: var(--accent-green);
+            border: 1px solid rgba(0,230,138,0.2);
+        }
+        .update-card-icon.icon-auto {
+            background: linear-gradient(135deg, rgba(123,97,255,0.15), rgba(59,130,246,0.15));
+            color: var(--accent-purple);
+            border: 1px solid rgba(123,97,255,0.2);
+        }
+        .update-card-label {
+            font-size: 0.78rem;
+            font-weight: 500;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .version-display {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 2rem;
+            font-weight: 700;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.2;
+        }
+        .version-label {
+            font-size: 0.82rem;
+            color: var(--text-dim);
+            margin-top: 2px;
+        }
+        .update-status-checking {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-secondary);
+            font-size: 0.88rem;
+        }
+        .update-status-checking .spinner {
+            width: 18px;
+            height: 18px;
+        }
+        .update-badge-ok {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 10px;
+            background: rgba(0, 230, 138, 0.1);
+            border: 1px solid rgba(0, 230, 138, 0.2);
+            color: var(--accent-green);
+            font-size: 0.88rem;
+            font-weight: 500;
+        }
+        .update-badge-ok svg { width: 18px; height: 18px; flex-shrink: 0; }
+        .update-available-banner {
+            background: var(--bg-card);
+            border: 1px solid rgba(255, 165, 2, 0.3);
+            border-radius: var(--radius);
+            padding: 20px 24px;
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+        .update-available-banner::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: var(--gradient-score);
+        }
+        .update-available-inner {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .update-available-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: rgba(255, 165, 2, 0.12);
+            border: 1px solid rgba(255, 165, 2, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            color: var(--accent-orange);
+        }
+        .update-available-icon svg { width: 22px; height: 22px; }
+        .update-available-text {
+            flex: 1;
+        }
+        .update-available-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            margin-bottom: 2px;
+        }
+        .update-available-ver {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+        }
+        .update-available-ver .arrow {
+            color: var(--accent-orange);
+            margin: 0 6px;
+        }
+        .auto-update-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        .auto-update-info {
+            flex: 1;
+        }
+        .auto-update-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 0.92rem;
+            margin-bottom: 4px;
+        }
+        .auto-update-desc {
+            font-size: 0.78rem;
+            color: var(--text-dim);
+            line-height: 1.5;
+        }
+        .release-timeline {
+            position: relative;
+            padding-left: 28px;
+        }
+        .release-timeline::before {
+            content: '';
+            position: absolute;
+            left: 7px;
+            top: 8px;
+            bottom: 8px;
+            width: 2px;
+            background: var(--border-subtle);
+            border-radius: 1px;
+        }
+        .release-item {
+            position: relative;
+            padding: 12px 16px;
+            margin-bottom: 4px;
+            border-radius: 10px;
+            transition: var(--transition);
+        }
+        .release-item:hover {
+            background: rgba(0, 240, 255, 0.03);
+        }
+        .release-item::before {
+            content: '';
+            position: absolute;
+            left: -23px;
+            top: 18px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            border: 2px solid var(--text-dim);
+            z-index: 1;
+        }
+        .release-item.current::before {
+            border-color: var(--accent-cyan);
+            background: var(--accent-cyan);
+            box-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+        }
+        .release-item-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .release-ver {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+        }
+        .release-badge-current {
+            font-size: 0.68rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: rgba(0, 240, 255, 0.12);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(0, 240, 255, 0.2);
+        }
+        .release-date {
+            font-size: 0.78rem;
+            color: var(--text-dim);
+            margin-left: auto;
+        }
+        .release-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+        .release-section .update-card-accent {
+            background: var(--gradient-latency);
+        }
+        .release-section-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .release-section-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .release-count {
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 20px;
+            background: rgba(59, 130, 246, 0.12);
+            color: var(--accent-blue);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+        .release-scroll {
+            max-height: 420px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-subtle) transparent;
+        }
+        .release-scroll::-webkit-scrollbar { width: 4px; }
+        .release-scroll::-webkit-scrollbar-thumb {
+            background: var(--border-subtle);
+            border-radius: 2px;
+        }
+        .release-empty {
+            text-align: center;
+            padding: 32px 16px;
+            color: var(--text-dim);
+            font-size: 0.85rem;
+        }
+        .release-empty svg {
+            width: 32px;
+            height: 32px;
+            margin-bottom: 8px;
+            opacity: 0.3;
+        }
     </style>
 </head>
 <body>
@@ -949,66 +1251,114 @@
 
         <!-- ═══ Tab: Version & Update ═══ -->
         <div class="tab-panel" id="panel-update">
-            <div class="admin-section">
-                <div class="admin-section-header">
-                    <div class="admin-section-title">
-                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
-                        </svg>
-                        <span data-i18n="admin.version_update">Version & Update</span>
-                    </div>
-                </div>
-                <div style="max-width:600px;">
-                    <div style="display:flex;align-items:center;gap:15px;margin-bottom:15px;">
-                        <div>
-                            <div style="font-size:13px;color:var(--text-dim);" data-i18n="admin.current_version">Current Version</div>
-                            <div id="currentVersionDisplay" style="font-size:18px;font-weight:600;color:var(--text-main);margin-top:2px;">v—</div>
-                        </div>
-                        <div style="flex:1;"></div>
-                        <div id="updateStatusArea">
-                            <span id="updateStatusText" style="font-size:13px;color:var(--text-dim);" data-i18n="admin.checking_update">Checking for updates...</span>
-                        </div>
-                    </div>
-                    <div id="updateAvailableArea" style="display:none;padding:12px;border-radius:8px;background:var(--success-bg, rgba(46,204,113,0.1));border:1px solid var(--success-border, rgba(46,204,113,0.3));margin-bottom:15px;">
-                        <div style="display:flex;align-items:center;gap:10px;">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-green, #2ecc71)" stroke-width="2" style="width:20px;height:20px;flex-shrink:0;">
+            <!-- Update Available Banner (hidden by default) -->
+            <div id="updateAvailableArea" style="display:none;">
+                <div class="update-available-banner">
+                    <div class="update-available-inner">
+                        <div class="update-available-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
                             </svg>
-                            <div style="flex:1;">
-                                <div style="font-weight:600;color:var(--text-main);"><span data-i18n="admin.new_version_available">New version available</span>: <span id="latestVersionDisplay">—</span></div>
-                            </div>
-                            <button type="button" class="btn btn-primary" id="manualUpdateBtn" onclick="triggerManualUpdate()">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
-                                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-                                </svg>
-                                <span data-i18n="admin.update_now">Update Now</span>
-                            </button>
                         </div>
+                        <div class="update-available-text">
+                            <div class="update-available-title" data-i18n="admin.new_version_available">New version available</div>
+                            <div class="update-available-ver">
+                                <span id="currentVerInBanner">—</span>
+                                <span class="arrow">&rarr;</span>
+                                <span id="latestVersionDisplay" style="color:var(--accent-orange);font-weight:600;">—</span>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-primary" id="manualUpdateBtn" onclick="triggerManualUpdate()" style="padding:10px 24px;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                            <span data-i18n="admin.update_now">Update Now</span>
+                        </button>
                     </div>
-                    <div id="upToDateArea" style="display:none;padding:12px;border-radius:8px;background:rgba(46,204,113,0.08);border:1px solid rgba(46,204,113,0.2);margin-bottom:15px;">
-                        <div style="display:flex;align-items:center;gap:10px;">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-green, #2ecc71)" stroke-width="2" style="width:20px;height:20px;">
+                </div>
+            </div>
+
+            <!-- Version & Status Cards -->
+            <div class="update-grid">
+                <!-- Current Version Card -->
+                <div class="update-card">
+                    <div class="update-card-accent"></div>
+                    <div class="update-card-header">
+                        <div class="update-card-icon icon-version">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                            </svg>
+                        </div>
+                        <div class="update-card-label" data-i18n="admin.current_version">Current Version</div>
+                    </div>
+                    <div class="version-display" id="currentVersionDisplay">v—</div>
+                    <div class="version-label">Proxy Pulse</div>
+                </div>
+
+                <!-- Status Card -->
+                <div class="update-card">
+                    <div class="update-card-accent"></div>
+                    <div class="update-card-header">
+                        <div class="update-card-icon icon-status">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
                             </svg>
-                            <span style="color:var(--text-main);font-weight:500;" data-i18n="admin.up_to_date">You are running the latest version</span>
+                        </div>
+                        <div class="update-card-label" data-i18n="admin.update_status">Update Status</div>
+                    </div>
+                    <div id="updateStatusArea">
+                        <div class="update-status-checking">
+                            <div class="spinner"></div>
+                            <span id="updateStatusText" data-i18n="admin.checking_update">Checking for updates...</span>
                         </div>
                     </div>
-                    <div class="form-group" style="margin-top:15px;">
-                        <label class="form-label" style="display:flex;align-items:center;gap:10px;">
-                            <span data-i18n="admin.auto_update">Auto Update</span>
-                            <label class="toggle">
-                                <input type="checkbox" id="systemAutoUpdate" checked onchange="saveAutoUpdateToggle(this.checked)">
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </label>
-                        <div class="form-hint" data-i18n="admin.auto_update_hint">When enabled, the system periodically checks for new releases and updates automatically</div>
-                    </div>
-                    <!-- Release History -->
-                    <div style="margin-top:20px;">
-                        <div style="font-size:13px;font-weight:600;color:var(--text-main);margin-bottom:8px;" data-i18n="admin.release_history">Release History</div>
-                        <div id="releaseHistoryList" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;">
-                            <div style="padding:12px;color:var(--text-dim);font-size:13px;" data-i18n="common.loading">Loading...</div>
+                    <div id="upToDateArea" style="display:none;">
+                        <div class="update-badge-ok">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                            </svg>
+                            <span data-i18n="admin.up_to_date">You are running the latest version</span>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Auto Update Card -->
+            <div class="update-card" style="margin-bottom:20px;">
+                <div class="update-card-accent" style="background:linear-gradient(135deg, #7b61ff 0%, #3b82f6 100%);"></div>
+                <div class="auto-update-row">
+                    <div class="update-card-icon icon-auto">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+                        </svg>
+                    </div>
+                    <div class="auto-update-info">
+                        <div class="auto-update-title" data-i18n="admin.auto_update">Auto Update</div>
+                        <div class="auto-update-desc" data-i18n="admin.auto_update_hint">When enabled, the system periodically checks for new releases and updates automatically</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="systemAutoUpdate" checked onchange="saveAutoUpdateToggle(this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Release History -->
+            <div class="release-section">
+                <div class="update-card-accent"></div>
+                <div class="release-section-header">
+                    <div class="update-card-icon" style="background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(139,92,246,0.15));color:var(--accent-blue);border:1px solid rgba(59,130,246,0.2);">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                    </div>
+                    <div class="release-section-title" data-i18n="admin.release_history">Release History</div>
+                    <span class="release-count" id="releaseCount">—</span>
+                </div>
+                <div class="release-scroll" id="releaseHistoryList">
+                    <div class="release-empty">
+                        <div class="spinner" style="margin:0 auto 12px;width:20px;height:20px;"></div>
+                        <div data-i18n="common.loading">Loading...</div>
                     </div>
                 </div>
             </div>
@@ -1987,6 +2337,7 @@
                 document.getElementById('currentVersionDisplay').textContent = 'v' + d.current_version;
                 if (d.update_available) {
                     document.getElementById('latestVersionDisplay').textContent = 'v' + d.latest_version;
+                    document.getElementById('currentVerInBanner').textContent = 'v' + d.current_version;
                     document.getElementById('updateAvailableArea').style.display = '';
                     document.getElementById('upToDateArea').style.display = 'none';
                     document.getElementById('updateStatusArea').style.display = 'none';
@@ -2005,28 +2356,36 @@
 
     async function loadReleaseHistory() {
         const container = document.getElementById('releaseHistoryList');
+        const countBadge = document.getElementById('releaseCount');
         try {
             const resp = await authFetch('/api/v1/admin/update/releases');
             const json = await resp.json();
             if (json.success && json.data.length > 0) {
+                countBadge.textContent = json.data.length;
                 const currentVersion = document.getElementById('currentVersionDisplay').textContent;
-                container.innerHTML = json.data.map((r, i) => {
+                container.innerHTML = '<div class="release-timeline">' + json.data.map((r, i) => {
                     const ver = r.version;
                     const isCurrent = ('v' + currentVersion.replace(/^v/, '')) === ver || currentVersion === ver;
-                    const date = r.date ? new Date(r.date).toLocaleDateString() : '';
-                    return '<div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;' + (i === 0 ? '' : '') + '">'
-                        + '<div style="flex:1;">'
-                        + '<span style="font-weight:600;color:var(--text-main);">' + escapeHtml(ver) + '</span>'
-                        + (isCurrent ? ' <span style="font-size:11px;background:var(--accent-cyan);color:#000;padding:1px 6px;border-radius:4px;">' + (I18N.t('admin.current') || 'current') + '</span>' : '')
-                        + '<span style="margin-left:10px;font-size:12px;color:var(--text-dim);">' + escapeHtml(date) + '</span>'
+                    const date = r.date ? new Date(r.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+                    return '<div class="release-item' + (isCurrent ? ' current' : '') + '">'
+                        + '<div class="release-item-header">'
+                        + '<span class="release-ver">' + escapeHtml(ver) + '</span>'
+                        + (isCurrent ? '<span class="release-badge-current">' + (I18N.t('admin.current') || 'current') + '</span>' : '')
+                        + '<span class="release-date">' + escapeHtml(date) + '</span>'
                         + '</div>'
                         + '</div>';
-                }).join('');
+                }).join('') + '</div>';
             } else {
-                container.innerHTML = '<div style="padding:12px;color:var(--text-dim);font-size:13px;">' + (I18N.t('admin.no_releases') || 'No releases found') + '</div>';
+                countBadge.textContent = '0';
+                container.innerHTML = '<div class="release-empty">'
+                    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>'
+                    + '<div>' + (I18N.t('admin.no_releases') || 'No releases found') + '</div></div>';
             }
         } catch(e) {
-            container.innerHTML = '<div style="padding:12px;color:var(--text-dim);font-size:13px;">Failed to load releases</div>';
+            countBadge.textContent = '—';
+            container.innerHTML = '<div class="release-empty">'
+                + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>'
+                + '<div>Failed to load releases</div></div>';
         }
     }
 
