@@ -1292,7 +1292,7 @@
                         <div class="update-card-label" data-i18n="admin.current_version">Current Version</div>
                     </div>
                     <div class="version-display" id="currentVersionDisplay">v—</div>
-                    <div class="version-label">Proxy Pulse</div>
+                    <div class="version-label" style="padding-left:4px;">Proxy Pulse</div>
                 </div>
 
                 <!-- Status Card -->
@@ -1301,7 +1301,7 @@
                     <div class="update-card-header">
                         <div class="update-card-icon icon-status">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                                <path d="M1 1l22 22"/><path d="M16.72 11.06A10.94 10.94 0 0119 12.55"/><path d="M5 12.55a10.94 10.94 0 015.17-2.39"/><path d="M10.71 5.05A16 16 0 0122.56 9"/><path d="M1.42 9a15.91 15.91 0 014.7-2.88"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>
                             </svg>
                         </div>
                         <div class="update-card-label" data-i18n="admin.update_status">Update Status</div>
@@ -1340,6 +1340,27 @@
                         <input type="checkbox" id="systemAutoUpdate" checked onchange="saveAutoUpdateToggle(this.checked)">
                         <span class="toggle-slider"></span>
                     </label>
+                    <div style="width:1px;height:32px;background:var(--border-subtle);margin:0 8px;"></div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div class="update-card-icon" style="background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(123,97,255,0.15));color:var(--accent-blue);border:1px solid rgba(59,130,246,0.2);">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div style="font-size:0.78rem;font-weight:500;color:var(--text-dim);margin-bottom:4px;" data-i18n="admin.install_schedule">Install Schedule</div>
+                            <select class="form-select" id="systemInstallSchedule" onchange="saveInstallSchedule(this.value)" style="min-width:140px;padding:6px 30px 6px 10px;font-size:0.82rem;">
+                                <option value="anytime" data-i18n="admin.schedule_anytime">Anytime</option>
+                                <option value="night" data-i18n="admin.schedule_night">Night (00:00–06:00)</option>
+                                <option value="custom" data-i18n="admin.schedule_custom">Custom</option>
+                            </select>
+                        </div>
+                        <div id="customScheduleRange" style="display:none;align-items:center;gap:6px;">
+                            <input type="time" class="form-input" id="scheduleFrom" value="02:00" onchange="saveInstallSchedule('custom')" style="width:100px;padding:6px 8px;font-size:0.82rem;">
+                            <span style="color:var(--text-dim);">–</span>
+                            <input type="time" class="form-input" id="scheduleTo" value="06:00" onchange="saveInstallSchedule('custom')" style="width:100px;padding:6px 8px;font-size:0.82rem;">
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -2434,6 +2455,24 @@
         } catch(_) {}
     }
 
+    async function saveInstallSchedule(value) {
+        if (demoGuard()) return;
+        const rangeEl = document.getElementById('customScheduleRange');
+        rangeEl.style.display = value === 'custom' ? 'flex' : 'none';
+        try {
+            const body = { install_schedule: value };
+            if (value === 'custom') {
+                body.install_schedule_from = document.getElementById('scheduleFrom').value;
+                body.install_schedule_to = document.getElementById('scheduleTo').value;
+            }
+            await authFetch('/api/v1/admin/settings/system', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+        } catch(_) {}
+    }
+
     // Load version info on page load
     checkForUpdate().then(() => loadReleaseHistory());
 
@@ -2447,6 +2486,12 @@
                 document.getElementById('systemDefaultLanguage').value = d.default_language;
                 document.getElementById('systemDefaultTimezone').value = d.default_timezone;
                 document.getElementById('systemDefaultTheme').value = d.default_theme;
+                // Install schedule
+                const schedule = d.install_schedule || 'anytime';
+                document.getElementById('systemInstallSchedule').value = schedule;
+                document.getElementById('customScheduleRange').style.display = schedule === 'custom' ? 'flex' : 'none';
+                if (d.install_schedule_from) document.getElementById('scheduleFrom').value = d.install_schedule_from;
+                if (d.install_schedule_to) document.getElementById('scheduleTo').value = d.install_schedule_to;
             }
         } catch(e) {
             showToast('Failed to load system settings', 'error');

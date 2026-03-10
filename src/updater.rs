@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use chrono::Timelike;
 use tokio::process::Command;
 use tracing::{error, info, warn};
 
@@ -29,7 +30,7 @@ pub fn spawn_auto_updater(db: Database) {
                 .map(|v| v != "false")
                 .unwrap_or(true); // default: enabled
 
-            if enabled {
+            if enabled && is_within_schedule(&db).await {
                 match check_and_update().await {
                     Ok(true) => info!("Auto-update triggered, process will restart via run script"),
                     Ok(false) => info!("No update available"),
@@ -40,6 +41,64 @@ pub fn spawn_auto_updater(db: Database) {
             tokio::time::sleep(tokio::time::Duration::from_secs(CHECK_INTERVAL_SECS)).await;
         }
     });
+}
+
+/// Check if the current time is within the configured install schedule
+async fn is_within_schedule(db: &Database) -> bool {
+    let schedule = db
+        .get_setting("system.install_schedule")
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "anytime".to_string());
+
+    match schedule.as_str() {
+        "anytime" => true,
+        "night" => {
+            let hour = chrono::Local::now().hour();
+            hour < 6 // 00:00–06:00
+        }
+        "custom" => {
+            let from = db
+                .get_setting("system.install_schedule_from")
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| "02:00".to_string());
+            let to = db
+                .get_setting("system.install_schedule_to")
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| "06:00".to_string());
+            is_time_in_range(&from, &to)
+        }
+        _ => true,
+    }
+}
+
+fn parse_hm(s: &str) -> Option<(u32, u32)> {
+    let parts: Vec<&str> = s.split(':').collect();
+    if parts.len() == 2 {
+        Some((parts[0].parse().ok()?, parts[1].parse().ok()?))
+    } else {
+        None
+    }
+}
+
+fn is_time_in_range(from: &str, to: &str) -> bool {
+    let now = chrono::Local::now();
+    let current = now.hour() * 60 + now.minute();
+    let Some((fh, fm)) = parse_hm(from) else { return true };
+    let Some((th, tm)) = parse_hm(to) else { return true };
+    let start = fh * 60 + fm;
+    let end = th * 60 + tm;
+    if start <= end {
+        current >= start && current < end
+    } else {
+        // Wraps midnight, e.g. 22:00–06:00
+        current >= start || current < end
+    }
 }
 
 /// Check GitHub for a newer version and trigger update if available
