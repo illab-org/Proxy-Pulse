@@ -305,7 +305,7 @@ Full management interface:
 Multi-language support with four built-in locales:
 - 🇺🇸 English (`en`)
 - 🇨🇳 简体中文 (`zh-CN`)
-- 🇹🇼 繁體中文 (`zh-TW`)
+- �🇰 繁體中文 (`zh-TW`)
 - 🇯🇵 日本語 (`ja`)
 
 Language auto-detects from the browser and can be switched from the UI.
