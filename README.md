@@ -34,6 +34,35 @@ This project is built exclusively for **lawful and compliant** purposes, includi
 
 ---
 
+## Quick Start
+
+No Rust required — just download the `run` script and it handles everything:
+
+```bash
+# Download the run script
+curl -fsSL -o run https://raw.githubusercontent.com/OpenInfra-Labs/Proxy-Pulse/main/run && chmod +x run
+
+# Start (auto-downloads binary + config for your platform)
+./run
+
+# Check status
+./run status
+
+# Stop
+./run stop
+
+# Update to latest version
+./run update
+```
+
+The `run` script automatically:
+- Detects your OS and CPU architecture
+- Downloads the correct pre-compiled binary from GitHub Releases
+- Downloads `config.example.yaml` and creates `config.yaml` if not present
+- Starts the service in the background
+
+---
+
 ## Deployment & Running
 
 ### Prerequisites

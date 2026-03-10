@@ -1,5 +1,4 @@
 /target/
-/build/
 *.db
 *.db-shm
 *.db-wal
@@ -7,3 +6,4 @@ config.yaml
 .DS_Store
 *.log
 .proxy-pulse.pid
+proxy-pulse

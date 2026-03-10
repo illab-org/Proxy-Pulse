@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────
 #  Proxy Pulse — Run / Stop Script
+#  Auto-downloads the latest release binary
 # ─────────────────────────────────────────────
 set -euo pipefail
 
+REPO="OpenInfra-Labs/Proxy-Pulse"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUILD_DIR="$SCRIPT_DIR/build"
+BINARY="$SCRIPT_DIR/proxy-pulse"
 PID_FILE="$SCRIPT_DIR/.proxy-pulse.pid"
+CONFIG_FILE="$SCRIPT_DIR/config.yaml"
+CONFIG_EXAMPLE="$SCRIPT_DIR/config.example.yaml"
 
 # ─── Detect platform ───
-detect_binary() {
+detect_artifact() {
     local os arch
     os="$(uname -s | tr '[:upper:]' '[:lower:]')"
     arch="$(uname -m)"
@@ -29,6 +33,72 @@ detect_binary() {
     echo "proxy-pulse-${os}-${arch}"
 }
 
+# ─── Download latest release binary ───
+download_binary() {
+    local artifact="$1"
+    local tarball="${artifact}.tar.gz"
+
+    echo "Fetching latest release info..."
+    local download_url
+    download_url=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+        | grep -o "\"browser_download_url\": *\"[^\"]*${tarball}\"" \
+        | head -1 \
+        | sed 's/.*"\(https[^"]*\)".*/\1/')
+
+    if [ -z "$download_url" ]; then
+        echo "Error: Could not find release asset '${tarball}'" >&2
+        echo "Check https://github.com/${REPO}/releases for available downloads." >&2
+        exit 1
+    fi
+
+    echo "Downloading ${tarball}..."
+    curl -fsSL -o "$SCRIPT_DIR/$tarball" "$download_url"
+
+    echo "Extracting..."
+    tar xzf "$SCRIPT_DIR/$tarball" -C "$SCRIPT_DIR"
+    mv "$SCRIPT_DIR/$artifact" "$BINARY"
+    chmod +x "$BINARY"
+    rm -f "$SCRIPT_DIR/$tarball"
+    echo "Binary downloaded: $BINARY"
+}
+
+# ─── Download config.example.yaml from repo ───
+download_config_example() {
+    echo "Downloading config.example.yaml..."
+    curl -fsSL -o "$CONFIG_EXAMPLE" \
+        "https://raw.githubusercontent.com/${REPO}/main/config.example.yaml"
+    echo "Config template downloaded: $CONFIG_EXAMPLE"
+}
+
+# ─── Ensure binary exists ───
+ensure_binary() {
+    if [ ! -f "$BINARY" ]; then
+        local artifact
+        artifact="$(detect_artifact)"
+        download_binary "$artifact"
+    fi
+}
+
+# ─── Ensure config exists ───
+ensure_config() {
+    if [ ! -f "$CONFIG_EXAMPLE" ]; then
+        download_config_example
+    fi
+    if [ ! -f "$CONFIG_FILE" ]; then
+        cp "$CONFIG_EXAMPLE" "$CONFIG_FILE"
+        echo "Config: created config.yaml from config.example.yaml (default settings)."
+    fi
+}
+
+# ─── Update binary to latest ───
+update_binary() {
+    local artifact
+    artifact="$(detect_artifact)"
+    echo "Updating to latest release..."
+    download_binary "$artifact"
+    echo "Update complete."
+}
+
 # ─── Stop ───
 stop_service() {
     if [ ! -f "$PID_FILE" ]; then
@@ -42,7 +112,6 @@ stop_service() {
     if kill -0 "$pid" 2>/dev/null; then
         echo "Stopping Proxy Pulse (PID: $pid)..."
         kill "$pid"
-        # Wait up to 10 seconds for graceful shutdown
         local i=0
         while kill -0 "$pid" 2>/dev/null && [ $i -lt 10 ]; do
             sleep 1
@@ -62,7 +131,6 @@ stop_service() {
 
 # ─── Start ───
 start_service() {
-    # Check if already running
     if [ -f "$PID_FILE" ]; then
         local pid
         pid="$(cat "$PID_FILE")"
@@ -73,32 +141,12 @@ start_service() {
         rm -f "$PID_FILE"
     fi
 
-    local binary_name
-    binary_name="$(detect_binary)"
-    local binary_path="$BUILD_DIR/$binary_name"
+    ensure_binary
+    ensure_config
 
-    if [ ! -f "$binary_path" ]; then
-        echo "Binary not found: $binary_path" >&2
-        echo "Available binaries:" >&2
-        ls -1 "$BUILD_DIR"/ 2>/dev/null || echo "  (none)" >&2
-        exit 1
-    fi
-
-    if [ ! -x "$binary_path" ]; then
-        chmod +x "$binary_path"
-    fi
-
-    # Auto-create config.yaml from example if not exists
-    if [ ! -f "$SCRIPT_DIR/config.yaml" ]; then
-        if [ -f "$SCRIPT_DIR/config.example.yaml" ]; then
-            cp "$SCRIPT_DIR/config.example.yaml" "$SCRIPT_DIR/config.yaml"
-            echo "Config: created config.yaml from config.example.yaml (default settings)."
-        fi
-    fi
-
-    echo "Starting Proxy Pulse ($binary_name)..."
+    echo "Starting Proxy Pulse..."
     cd "$SCRIPT_DIR"
-    nohup "$binary_path" >> "$SCRIPT_DIR/proxy-pulse.log" 2>&1 &
+    nohup "$BINARY" >> "$SCRIPT_DIR/proxy-pulse.log" 2>&1 &
     local pid=$!
     echo "$pid" > "$PID_FILE"
     echo "Proxy Pulse started in background (PID: $pid)."
@@ -116,6 +164,9 @@ case "${1:-}" in
         else
             echo "Proxy Pulse is not running."
         fi
+        ;;
+    update)
+        update_binary
         ;;
     *)
         start_service

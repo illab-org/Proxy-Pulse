@@ -34,6 +34,35 @@ Proxy Pulse 是一款开源的代理池生命周期管理工具，专为**合法
 
 ---
 
+## 快速启动
+
+无需安装 Rust —— 只需下载 `run` 脚本即可自动完成一切：
+
+```bash
+# 下载 run 脚本
+curl -fsSL -o run https://raw.githubusercontent.com/OpenInfra-Labs/Proxy-Pulse/main/run && chmod +x run
+
+# 启动（自动下载对应平台的二进制 + 配置文件）
+./run
+
+# 查看状态
+./run status
+
+# 停止
+./run stop
+
+# 更新到最新版本
+./run update
+```
+
+`run` 脚本会自动：
+- 检测当前操作系统和 CPU 架构
+- 从 GitHub Releases 下载对应的预编译二进制文件
+- 自动下载 `config.example.yaml` 并生成 `config.yaml`（如不存在）
+- 在后台启动服务
+
+---
+
 ## 部署与运行
 
 ### 环境要求

@@ -1,4 +1,4 @@
-name: Build & Deploy
+name: Build & Release
 
 on:
   push:
@@ -62,42 +62,6 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: target/${{ matrix.target }}/release/proxy-pulse
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Prepare main branch content
-        run: |
-          cp -r main deploy
-          mkdir -p deploy/build
-          for dir in artifacts/*/; do
-            name=$(basename "$dir")
-            cp "$dir/proxy-pulse" "deploy/build/$name"
-            chmod +x "deploy/build/$name"
-          done
-          chmod +x deploy/run
-
-      - name: Deploy to main branch
-        run: |
-          cd deploy
-          git init
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -b main
-          git add -A
-          git commit -m "release: ${GITHUB_REF_NAME} from ${GITHUB_SHA::7}"
-          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-          git push origin main --force
 
   release:
     needs: build
