@@ -32,6 +32,8 @@ use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 #[derive(Embed)]
 #[folder = "static/"]
@@ -43,12 +45,30 @@ use crate::db::Database;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize logging
-    tracing_subscriber::fmt()
-        .with_env_filter(
+    // Initialize logging: daily rolling file (7-day retention) + stdout
+    let file_appender = tracing_appender::rolling::RollingFileAppender::builder()
+        .rotation(tracing_appender::rolling::Rotation::DAILY)
+        .filename_prefix("proxy-pulse")
+        .filename_suffix("log")
+        .max_log_files(7)
+        .build("logs")
+        .expect("failed to initialize rolling file appender");
+    let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
+
+    tracing_subscriber::registry()
+        .with(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
-        .with_target(false)
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_target(false)
+        )
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_target(false)
+                .with_ansi(false)
+                .with_writer(file_writer)
+        )
         .init();
 
     info!("Starting Proxy Pulse v1.0.2");
@@ -82,9 +102,9 @@ async fn main() -> anyhow::Result<()> {
     scheduler::start_schedulers(db, config.clone()).await;
     info!("Background schedulers started");
 
-    // Start memory monitor (logs every 1 second)
-    mem_monitor::spawn_monitor(1);
-    info!("Memory monitor started (1s interval)");
+    // Start memory monitor (logs every 60 seconds)
+    mem_monitor::spawn_monitor(60);
+    info!("Memory monitor started (60s interval)");
 
     // Build application router
     //

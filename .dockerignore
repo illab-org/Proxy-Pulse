@@ -5,6 +5,7 @@ target/
 config.yaml
 .DS_Store
 *.log
+logs/
 .proxy-pulse.pid
 .proxy-pulse.version
 proxy-pulse
