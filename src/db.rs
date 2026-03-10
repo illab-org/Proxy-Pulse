@@ -1,6 +1,7 @@
 use anyhow::Result;
-use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use chrono::{NaiveDateTime, Utc};
+use std::str::FromStr;
 
 use crate::models::{
     CheckLog, CountryCount, LatencyBucket, ProtocolCount, Proxy, ProxyStats, ScoreBucket,
@@ -14,11 +15,19 @@ pub struct Database {
 
 impl Database {
     pub async fn new(url: &str) -> Result<Self> {
+        let opts = SqliteConnectOptions::from_str(url)?
+            .create_if_missing(true)
+            .pragma("journal_mode", "WAL")
+            .pragma("synchronous", "NORMAL")
+            .pragma("cache_size", "-2000")
+            .pragma("mmap_size", "0")
+            .pragma("journal_size_limit", "67108864");
+
         let pool = SqlitePoolOptions::new()
-            .max_connections(50)
-            .min_connections(2)
-            .idle_timeout(std::time::Duration::from_secs(300))
-            .connect(url)
+            .max_connections(8)
+            .min_connections(1)
+            .idle_timeout(std::time::Duration::from_secs(60))
+            .connect_with(opts)
             .await?;
 
         let db = Self { pool };

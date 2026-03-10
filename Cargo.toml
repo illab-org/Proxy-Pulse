@@ -45,7 +45,7 @@ urlencoding = "2"
 axum-extra = { version = "0.9", features = ["cookie"] }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = "0.6"
+tikv-jemallocator = { version = "0.6", features = ["unprefixed_malloc_on_supported_platforms"] }
 tikv-jemalloc-ctl = { version = "0.6", features = ["stats"] }
 
 [profile.release]
