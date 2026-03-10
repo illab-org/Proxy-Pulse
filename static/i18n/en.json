@@ -20,7 +20,10 @@
         "no_data": "No data available",
         "theme_system": "System",
         "theme_light": "Light",
-        "theme_dark": "Dark"
+        "theme_dark": "Dark",
+        "personal_settings": "Personal Settings",
+        "system_settings": "System Settings",
+        "footer_powered": "Powered by"
     },
     "dashboard": {
         "title": "Proxy Pulse — Dashboard",
@@ -70,13 +73,22 @@
         "footer_version": "Proxy Pulse v0.1.0",
         "footer_tagline": "Open Source Proxy Pool Management"
     },
+    "settings": {
+        "title": "Proxy Pulse — Settings",
+        "subtitle": "Personal Settings",
+        "personalization": "Personalization",
+        "language": "Language",
+        "theme": "Theme",
+        "save_preferences": "Save Preferences",
+        "preferences_saved": "Preferences saved"
+    },
     "admin": {
         "title": "Proxy Pulse — Admin Panel",
         "subtitle": "Admin Control Panel",
         "tab_proxies": "Proxy Management",
         "tab_sources": "Subscription Sources",
         "tab_import": "Bulk Import",
-        "tab_settings": "Settings",
+        "tab_users": "User Management",
         "change_password": "Change Password",
         "current_password": "Current Password",
         "new_password": "New Password",
@@ -168,7 +180,19 @@
         "toast_synced": "All sources synced",
         "toast_sync_started": "sources synced",
         "toast_delete_success": "Proxy deleted",
-        "never": "Never"
+        "never": "Never",
+        "create_user": "Create User",
+        "username": "Username",
+        "password": "Password",
+        "role": "Role",
+        "role_admin": "Admin",
+        "role_user": "User",
+        "btn_create_user": "Create User",
+        "user_list": "Users",
+        "no_users": "No users",
+        "user_created": "User created",
+        "user_deleted": "User deleted",
+        "confirm_delete_user": "Delete user"
     },
     "lang": {
         "en": "English",

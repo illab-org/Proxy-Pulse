@@ -95,7 +95,7 @@ pub async fn setup(
         )
     })?;
 
-    let user_id = state.db.create_user(body.username.trim(), &password_hash).await.map_err(|e| {
+    let user_id = state.db.create_user(body.username.trim(), &password_hash, "admin").await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(AuthResponse {
@@ -485,4 +485,290 @@ fn extract_api_key(req: &Request) -> Option<String> {
     }
 
     None
+}
+
+// ── Admin-only auth middleware (JSON 403 for non-admins) ──
+
+pub async fn admin_auth_middleware(
+    State(state): State<Arc<AppState>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let token = match extract_token(&req) {
+        Some(t) => t,
+        None => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({ "success": false, "error": "Authentication required" })),
+            )
+                .into_response();
+        }
+    };
+
+    match state.db.validate_session(&token).await {
+        Ok(Some(user_id)) => {
+            // Check role
+            match state.db.get_user_role(user_id).await {
+                Ok(Some(role)) if role == "admin" => {
+                    let new_expires = Utc::now().naive_utc() + Duration::hours(TOKEN_EXPIRY_HOURS);
+                    let _ = state.db.refresh_session(&token, new_expires).await;
+                    next.run(req).await
+                }
+                _ => (
+                    StatusCode::FORBIDDEN,
+                    Json(serde_json::json!({ "success": false, "error": "Admin access required" })),
+                )
+                    .into_response(),
+            }
+        }
+        _ => (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "success": false, "error": "Invalid or expired token" })),
+        )
+            .into_response(),
+    }
+}
+
+// ── Page-level admin middleware (redirects non-admins to /) ──
+
+pub async fn page_admin_middleware(
+    State(state): State<Arc<AppState>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let token = req
+        .headers()
+        .get(header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|cookies| {
+            cookies.split(';').find_map(|c| {
+                let c = c.trim();
+                c.strip_prefix("pp_token=").map(|t| t.to_string())
+            })
+        });
+
+    match token {
+        Some(ref t) => {
+            match state.db.validate_session(t).await {
+                Ok(Some(user_id)) => {
+                    match state.db.get_user_role(user_id).await {
+                        Ok(Some(role)) if role == "admin" => {
+                            let new_expires = Utc::now().naive_utc() + Duration::hours(TOKEN_EXPIRY_HOURS);
+                            let _ = state.db.refresh_session(t, new_expires).await;
+                            next.run(req).await
+                        }
+                        _ => axum::response::Redirect::to("/").into_response(),
+                    }
+                }
+                _ => axum::response::Redirect::to("/login").into_response(),
+            }
+        }
+        None => axum::response::Redirect::to("/login").into_response(),
+    }
+}
+
+// ── Current User Info ──
+
+pub async fn get_me(
+    State(state): State<Arc<AppState>>,
+    req: Request,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<AuthResponse>)> {
+    let err = |msg: &str| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(AuthResponse { success: false, token: None, error: Some(msg.to_string()) }),
+        )
+    };
+
+    let token = extract_token(&req).ok_or_else(|| err("Authentication required"))?;
+    let user_id = state.db.validate_session(&token).await
+        .map_err(|_| err("Invalid session"))?
+        .ok_or_else(|| err("Invalid session"))?;
+
+    let (username, role) = state.db.get_user_info(user_id).await
+        .map_err(|_| err("User not found"))?
+        .ok_or_else(|| err("User not found"))?;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "username": username,
+        "role": role
+    })))
+}
+
+// ── User Preferences ──
+
+#[derive(Debug, Deserialize)]
+pub struct PreferencesRequest {
+    pub theme: String,
+    pub language: String,
+}
+
+pub async fn get_preferences(
+    State(state): State<Arc<AppState>>,
+    req: Request,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<AuthResponse>)> {
+    let err = |msg: &str| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(AuthResponse { success: false, token: None, error: Some(msg.to_string()) }),
+        )
+    };
+
+    let token = extract_token(&req).ok_or_else(|| err("Authentication required"))?;
+    let user_id = state.db.validate_session(&token).await
+        .map_err(|_| err("Invalid session"))?
+        .ok_or_else(|| err("Invalid session"))?;
+
+    let (theme, language) = state.db.get_user_preferences(user_id).await
+        .map_err(|_| err("Failed to load preferences"))?;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "theme": theme,
+        "language": language
+    })))
+}
+
+pub async fn save_preferences(
+    State(state): State<Arc<AppState>>,
+    req: Request,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<AuthResponse>)> {
+    let err = |msg: &str| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(AuthResponse { success: false, token: None, error: Some(msg.to_string()) }),
+        )
+    };
+
+    let token = extract_token(&req).ok_or_else(|| err("Authentication required"))?;
+    let user_id = state.db.validate_session(&token).await
+        .map_err(|_| err("Invalid session"))?
+        .ok_or_else(|| err("Invalid session"))?;
+
+    let body_bytes = axum::body::to_bytes(req.into_body(), 1024 * 16).await
+        .map_err(|_| err("Invalid request body"))?;
+    let body: PreferencesRequest = serde_json::from_slice(&body_bytes)
+        .map_err(|_| err("Invalid request body"))?;
+
+    // Validate values
+    let valid_themes = ["system", "light", "dark"];
+    let valid_langs = ["en", "zh-CN", "zh-TW", "ja"];
+    if !valid_themes.contains(&body.theme.as_str()) || !valid_langs.contains(&body.language.as_str()) {
+        return Err(err("Invalid theme or language value"));
+    }
+
+    state.db.save_user_preferences(user_id, &body.theme, &body.language).await
+        .map_err(|_| err("Failed to save preferences"))?;
+
+    Ok(Json(serde_json::json!({ "success": true })))
+}
+
+// ── User Management (admin only) ──
+
+#[derive(Debug, Deserialize)]
+pub struct CreateUserRequest {
+    pub username: String,
+    pub password: String,
+    pub role: String,
+}
+
+pub async fn list_users(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<AuthResponse>)> {
+    let users = state.db.get_all_users().await.map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(AuthResponse { success: false, token: None, error: Some("Failed to list users".to_string()) }),
+        )
+    })?;
+
+    let users_json: Vec<serde_json::Value> = users.into_iter().map(|(id, username, role, created_at)| {
+        serde_json::json!({
+            "id": id,
+            "username": username,
+            "role": role,
+            "created_at": created_at
+        })
+    }).collect();
+
+    Ok(Json(serde_json::json!({ "success": true, "users": users_json })))
+}
+
+pub async fn create_user_handler(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<CreateUserRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<AuthResponse>)> {
+    let err = |msg: &str| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(AuthResponse { success: false, token: None, error: Some(msg.to_string()) }),
+        )
+    };
+
+    let username = body.username.trim().to_string();
+    if username.is_empty() || body.password.len() < 6 {
+        return Err(err("Username cannot be empty and password must be at least 6 characters"));
+    }
+
+    let valid_roles = ["admin", "user"];
+    if !valid_roles.contains(&body.role.as_str()) {
+        return Err(err("Role must be 'admin' or 'user'"));
+    }
+
+    let password_hash = bcrypt::hash(&body.password, bcrypt::DEFAULT_COST)
+        .map_err(|_| err("Failed to hash password"))?;
+
+    let user_id = state.db.create_user(&username, &password_hash, &body.role).await
+        .map_err(|e| {
+            let msg = if e.to_string().contains("UNIQUE") {
+                "Username already exists".to_string()
+            } else {
+                format!("Failed to create user: {}", e)
+            };
+            (
+                StatusCode::CONFLICT,
+                Json(AuthResponse { success: false, token: None, error: Some(msg) }),
+            )
+        })?;
+
+    Ok(Json(serde_json::json!({ "success": true, "id": user_id })))
+}
+
+pub async fn delete_user_handler(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(id): axum::extract::Path<i64>,
+    req: Request,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<AuthResponse>)> {
+    let err = |msg: &str| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(AuthResponse { success: false, token: None, error: Some(msg.to_string()) }),
+        )
+    };
+
+    // Get current user to prevent self-deletion
+    let token = extract_token(&req).ok_or_else(|| err("Authentication required"))?;
+    let current_user_id = state.db.validate_session(&token).await
+        .map_err(|_| err("Invalid session"))?
+        .ok_or_else(|| err("Invalid session"))?;
+
+    if id == current_user_id {
+        return Err(err("Cannot delete your own account"));
+    }
+
+    // Prevent deleting the last admin
+    let target_role = state.db.get_user_role(id).await
+        .map_err(|_| err("User not found"))?
+        .ok_or_else(|| err("User not found"))?;
+
+    if target_role == "admin" {
+        let admin_count = state.db.count_admins().await.map_err(|_| err("Database error"))?;
+        if admin_count <= 1 {
+            return Err(err("Cannot delete the last admin user"));
+        }
+    }
+
+    let deleted = state.db.delete_user(id).await.map_err(|_| err("Failed to delete user"))?;
+    Ok(Json(serde_json::json!({ "success": true, "deleted": deleted })))
 }

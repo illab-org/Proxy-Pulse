@@ -149,13 +149,14 @@ impl Database {
         .execute(&self.pool)
         .await;
 
-        // Users table (single-user auth)
+        // Users table (multi-user auth with roles)
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'user',
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
             "#,
@@ -198,6 +199,30 @@ impl Database {
         let _ = sqlx::query("ALTER TABLE api_keys ADD COLUMN expires_at TEXT")
             .execute(&self.pool)
             .await;
+
+        // Migration: add role column to users if missing (existing DBs)
+        let _ = sqlx::query("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
+            .execute(&self.pool)
+            .await;
+        // Set all existing users (created before roles) to admin
+        let _ = sqlx::query("UPDATE users SET role = 'admin' WHERE role = 'user' AND id IN (SELECT id FROM users ORDER BY id LIMIT 1)")
+            .execute(&self.pool)
+            .await;
+
+        // User preferences table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS user_preferences (
+                user_id INTEGER PRIMARY KEY,
+                theme TEXT NOT NULL DEFAULT 'system',
+                language TEXT NOT NULL DEFAULT 'en',
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
 
         // Migration: change UNIQUE(ip, port) → UNIQUE(ip, port, protocol)
         // so the same IP:port can exist with different protocols (e.g. http + socks5)
@@ -988,12 +1013,13 @@ impl Database {
         Ok(row.0 > 0)
     }
 
-    pub async fn create_user(&self, username: &str, password_hash: &str) -> Result<i64> {
+    pub async fn create_user(&self, username: &str, password_hash: &str, role: &str) -> Result<i64> {
         let result = sqlx::query(
-            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+            "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
         )
         .bind(username)
         .bind(password_hash)
+        .bind(role)
         .execute(&self.pool)
         .await?;
         Ok(result.last_insert_rowid())
@@ -1118,5 +1144,82 @@ impl Database {
             .execute(&self.pool)
             .await?;
         Ok(result.rows_affected() > 0)
+    }
+
+    // ── User Management ──
+
+    pub async fn get_user_info(&self, user_id: i64) -> Result<Option<(String, String)>> {
+        let row = sqlx::query_as::<_, (String, String)>(
+            "SELECT username, role FROM users WHERE id = ?",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn get_user_role(&self, user_id: i64) -> Result<Option<String>> {
+        let row = sqlx::query_as::<_, (String,)>(
+            "SELECT role FROM users WHERE id = ?",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|r| r.0))
+    }
+
+    pub async fn get_all_users(&self) -> Result<Vec<(i64, String, String, String)>> {
+        let rows = sqlx::query_as::<_, (i64, String, String, String)>(
+            "SELECT id, username, role, created_at FROM users ORDER BY created_at ASC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    pub async fn delete_user(&self, id: i64) -> Result<bool> {
+        let result = sqlx::query("DELETE FROM users WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn count_admins(&self) -> Result<i64> {
+        let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users WHERE role = 'admin'")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(row.0)
+    }
+
+    // ── User Preferences ──
+
+    pub async fn get_user_preferences(&self, user_id: i64) -> Result<(String, String)> {
+        let row = sqlx::query_as::<_, (String, String)>(
+            "SELECT theme, language FROM user_preferences WHERE user_id = ?",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.unwrap_or_else(|| ("system".to_string(), "en".to_string())))
+    }
+
+    pub async fn save_user_preferences(&self, user_id: i64, theme: &str, language: &str) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO user_preferences (user_id, theme, language, updated_at)
+            VALUES (?, ?, ?, datetime('now'))
+            ON CONFLICT(user_id) DO UPDATE SET
+                theme = excluded.theme,
+                language = excluded.language,
+                updated_at = excluded.updated_at
+            "#,
+        )
+        .bind(user_id)
+        .bind(theme)
+        .bind(language)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 }

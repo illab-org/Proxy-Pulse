@@ -98,23 +98,38 @@ async fn main() -> anyhow::Result<()> {
     let proxy_api = api::proxy_api_router()
         .layer(middleware::from_fn_with_state(state.clone(), auth::proxy_api_auth_middleware));
 
-    // Admin/internal API routes — session token only
+    // Admin/internal API routes — admin role only
     let admin_api = api::admin_api_router()
-        .layer(middleware::from_fn_with_state(state.clone(), auth::auth_middleware));
+        .layer(middleware::from_fn_with_state(state.clone(), auth::admin_auth_middleware));
 
-    // Auth-management routes (change password, API keys) — session token only
+    // Auth-management routes (change password, API keys, preferences, me) — session token only
     let auth_mgmt = Router::new()
+        .route("/api/v1/auth/me", axum::routing::get(auth::get_me))
         .route("/api/v1/auth/change-password", axum::routing::post(auth::change_password))
         .route("/api/v1/auth/api-keys", axum::routing::get(auth::list_api_keys))
         .route("/api/v1/auth/api-keys", axum::routing::post(auth::create_api_key))
         .route("/api/v1/auth/api-keys/:id", axum::routing::delete(auth::delete_api_key))
+        .route("/api/v1/auth/preferences", axum::routing::get(auth::get_preferences))
+        .route("/api/v1/auth/preferences", axum::routing::put(auth::save_preferences))
         .layer(middleware::from_fn_with_state(state.clone(), auth::auth_middleware));
 
     // Protected page routes (redirect to /login if no cookie)
     let protected_pages = Router::new()
         .route("/", axum::routing::get(dashboard_page))
-        .route("/admin", axum::routing::get(admin_page))
+        .route("/settings", axum::routing::get(settings_page))
         .layer(middleware::from_fn_with_state(state.clone(), auth::page_auth_middleware));
+
+    // Admin page (admin role only, redirects to / if not admin)
+    let admin_page_route = Router::new()
+        .route("/admin", axum::routing::get(admin_page))
+        .layer(middleware::from_fn_with_state(state.clone(), auth::page_admin_middleware));
+
+    // User management routes (admin only)
+    let user_mgmt = Router::new()
+        .route("/api/v1/admin/users", axum::routing::get(auth::list_users))
+        .route("/api/v1/admin/users", axum::routing::post(auth::create_user_handler))
+        .route("/api/v1/admin/users/:id", axum::routing::delete(auth::delete_user_handler))
+        .layer(middleware::from_fn_with_state(state.clone(), auth::admin_auth_middleware));
 
     let app = Router::new()
         // Login page (public)
@@ -125,10 +140,14 @@ async fn main() -> anyhow::Result<()> {
         .merge(auth_mgmt)
         // Protected pages
         .merge(protected_pages)
+        // Admin page (admin only)
+        .merge(admin_page_route)
         // Proxy export API (session or API key)
         .merge(proxy_api)
-        // Admin API (session only)
+        // Admin API (admin only)
         .merge(admin_api)
+        // User management API (admin only)
+        .merge(user_mgmt)
         // Static assets (public — CSS/JS/i18n needed for login page)
         .nest_service("/static", ServeDir::new("static"))
         // Cache-Control: browsers must revalidate static files on every request
@@ -167,10 +186,18 @@ async fn dashboard_page() -> Html<String> {
     }
 }
 
-/// Serve admin.html page (requires auth)
+/// Serve admin.html page (requires admin role)
 async fn admin_page() -> Html<String> {
     match tokio::fs::read_to_string("static/admin.html").await {
         Ok(content) => Html(content),
-        Err(_) => Html("<h1>Admin page not found</h1>".to_string()),
+        Err(_) => Html("<h1>Admin panel not found</h1>".to_string()),
+    }
+}
+
+/// Serve settings.html page (requires auth)
+async fn settings_page() -> Html<String> {
+    match tokio::fs::read_to_string("static/settings.html").await {
+        Ok(content) => Html(content),
+        Err(_) => Html("<h1>Settings page not found</h1>".to_string()),
     }
 }

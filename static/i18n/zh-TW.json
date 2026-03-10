@@ -20,7 +20,10 @@
         "no_data": "暫無資料",
         "theme_system": "跟隨系統",
         "theme_light": "淺色",
-        "theme_dark": "深色"
+        "theme_dark": "深色",
+        "personal_settings": "個人設定",
+        "system_settings": "系統設定",
+        "footer_powered": "由"
     },
     "dashboard": {
         "title": "Proxy Pulse — 儀表板",
@@ -70,12 +73,22 @@
         "footer_version": "Proxy Pulse v0.1.0",
         "footer_tagline": "開源代理池管理系統"
     },
+    "settings": {
+        "title": "Proxy Pulse — 設定",
+        "subtitle": "個人設定",
+        "personalization": "個性化",
+        "language": "語言",
+        "theme": "主題",
+        "save_preferences": "儲存設定",
+        "preferences_saved": "設定已儲存"
+    },
     "admin": {
         "title": "Proxy Pulse — 管理面板",
         "subtitle": "管理控制台",
         "tab_proxies": "代理管理",
         "tab_sources": "訂閱來源",
-        "tab_import": "批次匯入",        "tab_settings": "設定",
+        "tab_import": "批次匯入",
+        "tab_users": "使用者管理",
         "change_password": "修改密碼",
         "current_password": "目前密碼",
         "new_password": "新密碼",
@@ -166,7 +179,19 @@
         "toast_synced": "所有訂閱來源已同步",
         "toast_sync_started": "個來源已同步",
         "toast_delete_success": "代理已刪除",
-        "never": "從未"
+        "never": "從未",
+        "create_user": "建立使用者",
+        "username": "使用者名稱",
+        "password": "密碼",
+        "role": "角色",
+        "role_admin": "管理員",
+        "role_user": "使用者",
+        "btn_create_user": "建立使用者",
+        "user_list": "使用者列表",
+        "no_users": "暫無使用者",
+        "user_created": "使用者已建立",
+        "user_deleted": "使用者已刪除",
+        "confirm_delete_user": "刪除使用者"
     },
     "lang": {
         "en": "English",

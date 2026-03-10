@@ -1283,3 +1283,151 @@ tbody tr:hover {
 ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.2);
 }
+
+/* ─── User Avatar Dropdown ─── */
+.user-avatar {
+    position: relative;
+}
+
+.avatar-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 2px solid var(--border-accent);
+    background: rgba(0, 240, 255, 0.08);
+    color: var(--accent-cyan);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+    padding: 0;
+}
+
+.avatar-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+.avatar-btn:hover {
+    background: rgba(0, 240, 255, 0.15);
+    box-shadow: 0 0 12px rgba(0, 240, 255, 0.2);
+    transform: scale(1.05);
+}
+
+.avatar-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 220px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: 8px 0;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    transition: all 0.2s ease;
+    z-index: 100;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(16px);
+}
+
+.avatar-dropdown.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.avatar-dropdown-header {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.avatar-username {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.avatar-role {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(0, 240, 255, 0.1);
+    color: var(--accent-cyan);
+    border: 1px solid rgba(0, 240, 255, 0.2);
+}
+
+.avatar-role.role-user {
+    background: rgba(123, 97, 255, 0.1);
+    color: var(--accent-purple);
+    border-color: rgba(123, 97, 255, 0.2);
+}
+
+.avatar-dropdown-divider {
+    height: 1px;
+    background: var(--border-subtle);
+    margin: 4px 0;
+}
+
+.avatar-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-family: 'Inter', sans-serif;
+    text-decoration: none;
+    cursor: pointer;
+    transition: var(--transition);
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+}
+
+.avatar-dropdown-item svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.avatar-dropdown-item:hover {
+    color: var(--text-primary);
+    background: rgba(0, 240, 255, 0.05);
+}
+
+.avatar-dropdown-item.logout-item {
+    color: var(--accent-red);
+}
+
+.avatar-dropdown-item.logout-item:hover {
+    background: rgba(255, 71, 87, 0.08);
+}
+
+/* Light theme overrides for avatar */
+[data-theme="light"] .avatar-btn {
+    border-color: rgba(8, 145, 178, 0.3);
+    background: rgba(8, 145, 178, 0.06);
+    color: var(--accent-cyan);
+}
+
+[data-theme="light"] .avatar-btn:hover {
+    background: rgba(8, 145, 178, 0.12);
+    box-shadow: 0 0 12px rgba(8, 145, 178, 0.15);
+}
+
+[data-theme="light"] .avatar-dropdown {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .avatar-dropdown-item:hover {
+    background: rgba(8, 145, 178, 0.06);
+}

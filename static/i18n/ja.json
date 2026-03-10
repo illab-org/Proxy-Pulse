@@ -20,7 +20,10 @@
         "no_data": "データがありません",
         "theme_system": "システム",
         "theme_light": "ライト",
-        "theme_dark": "ダーク"
+        "theme_dark": "ダーク",
+        "personal_settings": "個人設定",
+        "system_settings": "システム設定",
+        "footer_powered": "Powered by"
     },
     "dashboard": {
         "title": "Proxy Pulse — ダッシュボード",
@@ -70,13 +73,22 @@
         "footer_version": "Proxy Pulse v0.1.0",
         "footer_tagline": "オープンソース プロキシプール管理"
     },
+    "settings": {
+        "title": "Proxy Pulse — 設定",
+        "subtitle": "個人設定",
+        "personalization": "パーソナライズ",
+        "language": "言語",
+        "theme": "テーマ",
+        "save_preferences": "設定を保存",
+        "preferences_saved": "設定が保存されました"
+    },
     "admin": {
         "title": "Proxy Pulse — 管理パネル",
         "subtitle": "管理コントロールパネル",
         "tab_proxies": "プロキシ管理",
         "tab_sources": "サブスクリプションソース",
         "tab_import": "一括インポート",
-        "tab_settings": "設定",
+        "tab_users": "ユーザー管理",
         "change_password": "パスワード変更",
         "current_password": "現在のパスワード",
         "new_password": "新しいパスワード",
@@ -168,7 +180,19 @@
         "toast_synced": "全ソースを同期しました",
         "toast_sync_started": "件のソースを同期しました",
         "toast_delete_success": "プロキシを削除しました",
-        "never": "未実行"
+        "never": "未実行",
+        "create_user": "ユーザー作成",
+        "username": "ユーザー名",
+        "password": "パスワード",
+        "role": "ロール",
+        "role_admin": "管理者",
+        "role_user": "ユーザー",
+        "btn_create_user": "ユーザー作成",
+        "user_list": "ユーザー一覧",
+        "no_users": "ユーザーがいません",
+        "user_created": "ユーザーが作成されました",
+        "user_deleted": "ユーザーが削除されました",
+        "confirm_delete_user": "ユーザーを削除"
     },
     "lang": {
         "en": "English",
