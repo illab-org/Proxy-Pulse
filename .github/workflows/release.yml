@@ -8,6 +8,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'static/**'
+  workflow_dispatch:
 
 permissions:
   contents: write
