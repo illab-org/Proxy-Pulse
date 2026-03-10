@@ -1373,10 +1373,17 @@
         if (demoGuard()) return;
         const name = document.getElementById('sourceName').value.trim();
         const type = document.getElementById('sourceType').value;
-        const url = document.getElementById('sourceUrl').value.trim();
+        let url = document.getElementById('sourceUrl').value.trim();
         const content = document.getElementById('sourceContent').value.trim();
         const protocol = document.getElementById('sourceProtocol').value;
         const syncInterval = parseInt(document.getElementById('sourceSyncInterval').value, 10);
+
+        // Auto-convert GitHub blob URLs to raw URLs
+        const ghBlobRe = /^https?:\/\/github\.com\/([^\/]+)\/([^\/]+)\/blob\/(.+)$/;
+        const ghMatch = url.match(ghBlobRe);
+        if (ghMatch) {
+            url = `https://raw.githubusercontent.com/${ghMatch[1]}/${ghMatch[2]}/${ghMatch[3]}`;
+        }
 
         const body = { name, source_type: type, protocol_hint: protocol, sync_interval_secs: syncInterval };
         if (type === 'url') body.url = url;
