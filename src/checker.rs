@@ -221,7 +221,7 @@ async fn check_with_client(client: &reqwest::Client, target: &str) -> Result<()>
     if status.is_success() || status.is_redirection() {
         Ok(())
     } else {
-        anyhow::bail!("HTTP status: {}", status)
+        anyhow::bail!("HTTP {}", status.as_u16())
     }
 }
 

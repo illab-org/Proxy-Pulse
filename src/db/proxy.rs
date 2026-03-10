@@ -191,13 +191,6 @@ impl Database {
         .execute(&self.pool)
         .await?;
 
-        // Keep only the latest 10,000 log entries
-        sqlx::query(
-            "DELETE FROM check_logs WHERE id NOT IN (SELECT id FROM check_logs ORDER BY id DESC LIMIT 10000)"
-        )
-        .execute(&self.pool)
-        .await?;
-
         Ok(())
     }
 
@@ -380,6 +373,17 @@ impl Database {
         Ok(deleted)
     }
 
+    /// Cap check logs to a maximum number of entries
+    pub async fn cap_check_logs(&self, max_entries: i64) -> Result<u64> {
+        let result = sqlx::query(
+            "DELETE FROM check_logs WHERE id NOT IN (SELECT id FROM check_logs ORDER BY id DESC LIMIT ?)"
+        )
+        .bind(max_entries)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+
     // ── Admin: Proxy Management ──
 
     pub async fn delete_proxy(&self, id: i64) -> Result<bool> {
@@ -413,7 +417,7 @@ impl Database {
         }
         if let Some(proto) = filter_protocol {
             if !proto.is_empty() && proto != "all" {
-                where_clauses.push(format!("protocol = '{}'", proto.replace('\'', "''")));
+                where_clauses.push("protocol = ?".to_string());
             }
         }
 
@@ -424,9 +428,13 @@ impl Database {
         };
 
         let count_sql = format!("SELECT COUNT(*) FROM proxies {}", where_sql);
-        let total: (i64,) = sqlx::query_as(&count_sql)
-            .fetch_one(&self.pool)
-            .await?;
+        let mut count_query = sqlx::query_as::<_, (i64,)>(&count_sql);
+        if let Some(proto) = filter_protocol {
+            if !proto.is_empty() && proto != "all" {
+                count_query = count_query.bind(proto);
+            }
+        }
+        let total: (i64,) = count_query.fetch_one(&self.pool).await?;
 
         let query_sql = format!(
             r#"
@@ -441,7 +449,13 @@ impl Database {
             where_sql
         );
 
-        let proxies = sqlx::query_as::<_, Proxy>(&query_sql)
+        let mut data_query = sqlx::query_as::<_, Proxy>(&query_sql);
+        if let Some(proto) = filter_protocol {
+            if !proto.is_empty() && proto != "all" {
+                data_query = data_query.bind(proto);
+            }
+        }
+        let proxies = data_query
             .bind(per_page)
             .bind(offset)
             .fetch_all(&self.pool)

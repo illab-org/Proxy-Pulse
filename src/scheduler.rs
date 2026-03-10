@@ -120,10 +120,15 @@ pub async fn start_schedulers(db: Database) {
         loop {
             ticker.tick().await;
             match db_cleanup.cleanup_old_logs(3).await {
-                Ok(count) => info!(deleted = count, "Old check logs cleaned up"),
-                Err(e) => error!(error = %e, "Log cleanup failed"),
+                Ok(count) if count > 0 => info!(deleted = count, "Old check logs cleaned up"),
+                _ => {}
             }
-            // Also clean up expired sessions
+            // Cap total check logs to prevent unbounded growth
+            match db_cleanup.cap_check_logs(50_000).await {
+                Ok(count) if count > 0 => info!(deleted = count, "Check logs capped"),
+                _ => {}
+            }
+            // Clean up expired sessions
             match db_cleanup.cleanup_expired_sessions().await {
                 Ok(count) if count > 0 => info!(deleted = count, "Expired sessions cleaned up"),
                 _ => {}
