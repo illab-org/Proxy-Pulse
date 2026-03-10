@@ -2,15 +2,18 @@
 # ─────────────────────────────────────────────
 #  Proxy Pulse — Run / Stop Script
 #  Auto-downloads the latest release binary
+#  Self-updates when a newer version is available
 # ─────────────────────────────────────────────
 set -euo pipefail
 
 REPO="OpenInfra-Labs/Proxy-Pulse"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_PATH="$SCRIPT_DIR/$(basename "$0")"
 BINARY="$SCRIPT_DIR/proxy-pulse"
 PID_FILE="$SCRIPT_DIR/.proxy-pulse.pid"
 CONFIG_FILE="$SCRIPT_DIR/config.yaml"
 CONFIG_EXAMPLE="$SCRIPT_DIR/config.example.yaml"
+VERSION_FILE="$SCRIPT_DIR/.proxy-pulse.version"
 
 # ─── Detect platform ───
 detect_artifact() {
@@ -33,33 +36,62 @@ detect_artifact() {
     echo "proxy-pulse-${os}-${arch}"
 }
 
-# ─── Download latest release binary ───
-download_binary() {
-    local artifact="$1"
-    local tarball="${artifact}.tar.gz"
+# ─── Self-update: check if run script itself has a newer version ───
+self_update() {
+    echo "Checking for run script updates..."
+    local remote_url="https://raw.githubusercontent.com/${REPO}/main/run"
+    local tmp_script
+    tmp_script="$(mktemp)"
 
-    echo "Fetching latest release info..."
-    local download_url
-    download_url=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-        | grep -o "\"browser_download_url\": *\"[^\"]*${tarball}\"" \
-        | head -1 \
-        | sed 's/.*"\(https[^"]*\)".*/\1/')
-
-    if [ -z "$download_url" ]; then
-        echo "Error: Could not find release asset '${tarball}'" >&2
-        echo "Check https://github.com/${REPO}/releases for available downloads." >&2
-        exit 1
+    if ! curl -fsSL -o "$tmp_script" "$remote_url"; then
+        echo "Warning: Could not check for script updates." >&2
+        rm -f "$tmp_script"
+        return 0
     fi
 
-    echo "Downloading ${tarball}..."
-    curl -fsSL -o "$SCRIPT_DIR/$tarball" "$download_url"
+    if ! diff -q "$SCRIPT_PATH" "$tmp_script" > /dev/null 2>&1; then
+        echo "Run script has been updated. Applying update..."
+        cp "$tmp_script" "$SCRIPT_PATH"
+        chmod +x "$SCRIPT_PATH"
+        rm -f "$tmp_script"
+        echo "Restarting with updated script..."
+        exec "$SCRIPT_PATH" "$@"
+    fi
+
+    rm -f "$tmp_script"
+    echo "Run script is up to date."
+}
+
+# ─── Get latest release tag from GitHub ───
+get_latest_version() {
+    curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+        | grep '"tag_name"' \
+        | head -1 \
+        | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/'
+}
+
+# ─── Download release binary for a specific version ───
+download_binary() {
+    local artifact="$1"
+    local version="$2"
+    local tarball="${artifact}.tar.gz"
+    local download_url="https://github.com/${REPO}/releases/download/${version}/${tarball}"
+
+    echo "Downloading ${tarball} (${version})..."
+    if ! curl -fsSL -o "$SCRIPT_DIR/$tarball" "$download_url"; then
+        echo "Error: Failed to download ${download_url}" >&2
+        exit 1
+    fi
 
     echo "Extracting..."
     tar xzf "$SCRIPT_DIR/$tarball" -C "$SCRIPT_DIR"
     mv "$SCRIPT_DIR/$artifact" "$BINARY"
     chmod +x "$BINARY"
     rm -f "$SCRIPT_DIR/$tarball"
-    echo "Binary downloaded: $BINARY"
+
+    # Save installed version
+    echo "$version" > "$VERSION_FILE"
+    echo "Binary installed: $BINARY (${version})"
 }
 
 # ─── Download config.example.yaml from repo ───
@@ -70,12 +102,34 @@ download_config_example() {
     echo "Config template downloaded: $CONFIG_EXAMPLE"
 }
 
-# ─── Ensure binary exists ───
-ensure_binary() {
-    if [ ! -f "$BINARY" ]; then
+# ─── Check and update binary if a newer version is available ───
+check_binary_update() {
+    local latest_version
+    latest_version="$(get_latest_version)"
+
+    if [ -z "$latest_version" ]; then
+        echo "Warning: Could not fetch latest version info." >&2
+        return 0
+    fi
+
+    # No binary or no version file → download
+    if [ ! -f "$BINARY" ] || [ ! -f "$VERSION_FILE" ]; then
         local artifact
         artifact="$(detect_artifact)"
-        download_binary "$artifact"
+        download_binary "$artifact" "$latest_version"
+        return 0
+    fi
+
+    local current_version
+    current_version="$(cat "$VERSION_FILE")"
+
+    if [ "$current_version" != "$latest_version" ]; then
+        echo "New version available: ${current_version} → ${latest_version}"
+        local artifact
+        artifact="$(detect_artifact)"
+        download_binary "$artifact" "$latest_version"
+    else
+        echo "Binary is up to date (${current_version})."
     fi
 }
 
@@ -88,15 +142,6 @@ ensure_config() {
         cp "$CONFIG_EXAMPLE" "$CONFIG_FILE"
         echo "Config: created config.yaml from config.example.yaml (default settings)."
     fi
-}
-
-# ─── Update binary to latest ───
-update_binary() {
-    local artifact
-    artifact="$(detect_artifact)"
-    echo "Updating to latest release..."
-    download_binary "$artifact"
-    echo "Update complete."
 }
 
 # ─── Stop ───
@@ -141,7 +186,13 @@ start_service() {
         rm -f "$PID_FILE"
     fi
 
-    ensure_binary
+    # Self-update the run script first
+    self_update "$@"
+
+    # Check for binary updates (download or upgrade)
+    check_binary_update
+
+    # Ensure config
     ensure_config
 
     echo "Starting Proxy Pulse..."
@@ -166,9 +217,11 @@ case "${1:-}" in
         fi
         ;;
     update)
-        update_binary
+        self_update "$@"
+        check_binary_update
+        echo "Update complete."
         ;;
     *)
-        start_service
+        start_service "$@"
         ;;
 esac

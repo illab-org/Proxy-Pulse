@@ -73,7 +73,7 @@
         "no_proxies": "暂无代理。请先添加代理源以开始使用。",
         "loading_proxies": "正在加载代理...",
         "last_update": "上次更新",
-        "footer_version": "Proxy Pulse v0.1.0",
+        "footer_version": "Proxy Pulse v1.0.0",
         "footer_tagline": "开源代理池管理系统"
     },
     "settings": {

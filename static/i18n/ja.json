@@ -73,7 +73,7 @@
         "no_proxies": "プロキシがまだありません。プロキシソースを追加して開始してください。",
         "loading_proxies": "プロキシを読み込み中...",
         "last_update": "最終更新",
-        "footer_version": "Proxy Pulse v0.1.0",
+        "footer_version": "Proxy Pulse v1.0.0",
         "footer_tagline": "オープンソース プロキシプール管理"
     },
     "settings": {
