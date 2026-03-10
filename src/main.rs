@@ -1,3 +1,4 @@
+// Proxy Pulse - Open-source proxy pool management system
 mod api;
 mod auth;
 mod checker;
