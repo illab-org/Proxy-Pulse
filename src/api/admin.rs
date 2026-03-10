@@ -8,7 +8,6 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::info;
 
 use super::{demo_guard, ApiResponse, AppState, ErrorResponse};
 use crate::db::Database;
@@ -651,17 +650,29 @@ async fn admin_trigger_update(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
     demo_guard(&state)?;
 
-    tokio::spawn(async {
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-        match updater::check_and_update().await {
-            Ok(true) => info!("Manual update triggered successfully"),
-            Ok(false) => info!("No update available"),
-            Err(e) => tracing::error!(error = %e, "Manual update failed"),
-        }
-    });
-
-    Ok(Json(serde_json::json!({
-        "success": true,
-        "data": { "message": "Update triggered. The service will restart automatically." }
-    })))
+    // Check synchronously so we can return binary-not-ready error
+    match updater::manual_update().await {
+        Ok(true) => Ok(Json(serde_json::json!({
+            "success": true,
+            "data": { "message": "Update triggered. The service will restart automatically." }
+        }))),
+        Ok(false) => Ok(Json(serde_json::json!({
+            "success": true,
+            "data": { "message": "Already up to date." }
+        }))),
+        Err(e) if e.to_string() == "BINARY_NOT_READY" => Err((
+            StatusCode::ACCEPTED,
+            Json(ErrorResponse {
+                success: false,
+                error: "BINARY_NOT_READY".to_string(),
+            }),
+        )),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                success: false,
+                error: format!("Update failed: {}", e),
+            }),
+        )),
+    }
 }

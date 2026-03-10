@@ -151,7 +151,7 @@ impl Database {
                 SUM(CASE WHEN score >= 80 AND score < 90 THEN 1 ELSE 0 END),
                 SUM(CASE WHEN score >= 90 AND score <= 100 THEN 1 ELSE 0 END)
             FROM proxies
-            WHERE is_alive = 1
+            WHERE success_count >= 1
             "#,
         )
         .fetch_one(&self.pool)

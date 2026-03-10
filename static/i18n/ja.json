@@ -87,7 +87,8 @@
         "save_preferences": "設定を保存",
         "preferences_saved": "設定が保存されました",
         "timezone": "タイムゾーン",
-        "timezone_auto": "自動（ブラウザ）"
+        "timezone_auto": "自動（ブラウザ）",
+        "language_default": "システムデフォルト"
     },
     "admin": {
         "title": "Proxy Pulse — 管理パネル",
@@ -249,7 +250,11 @@
         "import_db": "データベースをインポート",
         "db_import_hint": "SQLiteデータベースファイルをインポートして現在のデータを置き換えます。インポート後にサービスは自動的に再起動します。",
         "confirm_import_db": "本当にインポートしますか？現在のデータベースが置き換えられ、サービスは自動的に再起動します。",
-        "db_imported": "データベースをインポートしました。サービスは自動的に再起動します。"
+        "db_imported": "データベースをインポートしました。サービスは自動的に再起動します。",
+        "binary_not_ready": "リリースはコンパイル中です。後でもう一度お試しください。",
+        "exporting_db": "データベースをエクスポート中...",
+        "importing_db": "データベースをインポート中...",
+        "export_failed": "エクスポートに失敗しました"
     },
     "lang": {
         "en": "English",

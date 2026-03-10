@@ -14,6 +14,53 @@ struct ReleaseEntry {
     date: String,
 }
 
+/// Check if the release binary asset exists for the current platform
+async fn release_has_binary(version: &str) -> bool {
+    let (os_name, arch_name) = detect_platform();
+    let ext = if os_name == "windows" { "zip" } else { "tar.gz" };
+    let artifact = format!("proxy-pulse-{}-{}.{}", os_name, arch_name, ext);
+    let url = format!(
+        "https://github.com/{}/releases/download/{}/{}",
+        REPO, version, artifact
+    );
+
+    let client = reqwest::Client::builder()
+        .user_agent("Proxy-Pulse-Updater")
+        .timeout(std::time::Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::none())
+        .build();
+
+    let Ok(client) = client else { return false };
+    // GitHub returns 302 redirect for existing assets, 404 for missing
+    match client.head(&url).send().await {
+        Ok(resp) => {
+            let status = resp.status().as_u16();
+            status == 200 || status == 302
+        }
+        Err(_) => false,
+    }
+}
+
+fn detect_platform() -> (&'static str, &'static str) {
+    let os = if cfg!(target_os = "linux") {
+        "linux"
+    } else if cfg!(target_os = "macos") {
+        "darwin"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "unknown"
+    };
+    let arch = if cfg!(target_arch = "x86_64") {
+        "amd64"
+    } else if cfg!(target_arch = "aarch64") {
+        "arm64"
+    } else {
+        "unknown"
+    };
+    (os, arch)
+}
+
 /// Spawn the auto-update background task
 pub fn spawn_auto_updater(db: Database) {
     tokio::spawn(async move {
@@ -63,8 +110,17 @@ async fn is_within_schedule(db: &Database) -> bool {
     }
 }
 
-/// Check GitHub for a newer version and trigger update if available
+/// Check GitHub for a newer version and trigger update if available (auto-update: skip if no binary)
 pub async fn check_and_update() -> anyhow::Result<bool> {
+    check_and_update_inner(false).await
+}
+
+/// Manual update: returns error if binary not yet available
+pub async fn manual_update() -> anyhow::Result<bool> {
+    check_and_update_inner(true).await
+}
+
+async fn check_and_update_inner(manual: bool) -> anyhow::Result<bool> {
     let current_version = env!("CARGO_PKG_VERSION");
     let latest_tag = fetch_latest_version().await?;
     let latest_version = latest_tag.trim_start_matches('v');
@@ -76,6 +132,20 @@ pub async fn check_and_update() -> anyhow::Result<bool> {
     );
 
     if !is_newer(latest_version, current_version) {
+        return Ok(false);
+    }
+
+    // Check if binary asset exists for this platform
+    let tag = if latest_tag.starts_with('v') {
+        latest_tag.clone()
+    } else {
+        format!("v{}", latest_tag)
+    };
+    if !release_has_binary(&tag).await {
+        if manual {
+            return Err(anyhow::anyhow!("BINARY_NOT_READY"));
+        }
+        info!(version = %latest_tag, "Binary not yet available, skipping auto-update");
         return Ok(false);
     }
 

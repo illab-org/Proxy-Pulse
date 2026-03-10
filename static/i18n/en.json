@@ -87,7 +87,8 @@
         "save_preferences": "Save Preferences",
         "preferences_saved": "Preferences saved",
         "timezone": "Timezone",
-        "timezone_auto": "Auto (browser)"
+        "timezone_auto": "Auto (browser)",
+        "language_default": "System Default"
     },
     "admin": {
         "title": "Proxy Pulse — Admin Panel",
@@ -251,7 +252,11 @@
         "import_db": "Import Database",
         "db_import_hint": "Import a SQLite database file to replace the current data. The service will restart automatically after import.",
         "confirm_import_db": "Are you sure? This will replace the current database and the service will restart automatically.",
-        "db_imported": "Database imported. The service will restart automatically."
+        "db_imported": "Database imported. The service will restart automatically.",
+        "binary_not_ready": "The release is being compiled. Please try again later.",
+        "exporting_db": "Exporting database...",
+        "importing_db": "Importing database...",
+        "export_failed": "Export failed"
     },
     "lang": {
         "en": "English",

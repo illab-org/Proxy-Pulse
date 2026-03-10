@@ -77,6 +77,34 @@
             padding-right: 36px;
             cursor: pointer;
         }
+        .custom-select { position: relative; display: inline-block; width: 100%; }
+        .custom-select-trigger {
+            display: flex; align-items: center; justify-content: space-between; gap: 8px;
+            padding: 10px 14px; background: rgba(10, 14, 26, 0.6);
+            border: 1px solid var(--border-subtle); border-radius: 8px;
+            color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;
+            cursor: pointer; transition: var(--transition); box-sizing: border-box;
+        }
+        .custom-select-trigger:hover { border-color: var(--text-dim); }
+        .custom-select-trigger.open { border-color: var(--accent-cyan); box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.1); }
+        .custom-select-trigger svg { width: 12px; height: 12px; color: var(--text-dim); flex-shrink: 0; transition: transform 0.2s; }
+        .custom-select-trigger.open svg { transform: rotate(180deg); }
+        .custom-select-dropdown {
+            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+            background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px;
+            padding: 4px; z-index: 9999; display: none;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4); backdrop-filter: blur(16px);
+            max-height: 240px; overflow-y: auto;
+        }
+        .custom-select-dropdown.show { display: block; }
+        .custom-select-option {
+            padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+            color: var(--text-secondary); transition: all 0.15s;
+        }
+        .custom-select-option:hover { background: rgba(0, 240, 255, 0.08); color: var(--text-primary); }
+        .custom-select-option.selected { background: rgba(0, 240, 255, 0.12); color: var(--accent-cyan); font-weight: 500; }
+        [data-theme="light"] .custom-select-trigger { background: rgba(241, 245, 249, 0.8); }
+        [data-theme="light"] .custom-select-dropdown { background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
         .btn {
             display: inline-flex;
             align-items: center;
@@ -312,6 +340,7 @@
                 <div class="form-group">
                     <label class="form-label" data-i18n="settings.language">Language</label>
                     <select class="form-select" id="prefLanguage">
+                        <option value="default" data-i18n="settings.language_default">System Default</option>
                         <option value="en">English</option>
                         <option value="zh-CN">简体中文</option>
                         <option value="zh-TW">繁體中文</option>
@@ -478,6 +507,64 @@
         }
     });
 
+    // ─── Custom Select Dropdown ───
+    function upgradeSelects() {
+        document.querySelectorAll('select.form-select').forEach(sel => {
+            if (sel.dataset.upgraded) return;
+            sel.dataset.upgraded = '1';
+            sel.style.display = 'none';
+            const wrap = document.createElement('div');
+            wrap.className = 'custom-select';
+            sel.parentNode.insertBefore(wrap, sel);
+            wrap.appendChild(sel);
+            const trigger = document.createElement('div');
+            trigger.className = 'custom-select-trigger';
+            trigger.innerHTML = '<span></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>';
+            wrap.appendChild(trigger);
+            const dropdown = document.createElement('div');
+            dropdown.className = 'custom-select-dropdown';
+            wrap.appendChild(dropdown);
+            function buildOptions() {
+                dropdown.innerHTML = '';
+                Array.from(sel.options).forEach(opt => {
+                    const item = document.createElement('div');
+                    item.className = 'custom-select-option' + (opt.value === sel.value ? ' selected' : '');
+                    item.textContent = opt.textContent;
+                    item.dataset.value = opt.value;
+                    item.addEventListener('click', e => {
+                        e.stopPropagation();
+                        sel.value = opt.value;
+                        sel.dispatchEvent(new Event('change'));
+                        trigger.querySelector('span').textContent = opt.textContent;
+                        dropdown.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
+                        item.classList.add('selected');
+                        dropdown.classList.remove('show');
+                        trigger.classList.remove('open');
+                    });
+                    dropdown.appendChild(item);
+                });
+                const curOpt = sel.options[sel.selectedIndex];
+                trigger.querySelector('span').textContent = curOpt ? curOpt.textContent : '';
+            }
+            buildOptions();
+            sel._csRebuild = buildOptions;
+            trigger.addEventListener('click', e => {
+                e.stopPropagation();
+                const isOpen = dropdown.classList.contains('show');
+                document.querySelectorAll('.custom-select-dropdown.show').forEach(d => { d.classList.remove('show'); d.previousElementSibling.classList.remove('open'); });
+                if (!isOpen) { dropdown.classList.add('show'); trigger.classList.add('open'); }
+            });
+            const desc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+            Object.defineProperty(sel, 'value', {
+                get() { return desc.get.call(this); },
+                set(v) { desc.set.call(this, v); const o = this.options[this.selectedIndex]; if (o) trigger.querySelector('span').textContent = o.textContent; }
+            });
+        });
+    }
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.custom-select-dropdown.show').forEach(d => { d.classList.remove('show'); d.previousElementSibling.classList.remove('open'); });
+    });
+
     // ─── Auth Fetch ───
     function authFetch(url, options = {}) {
         const token = localStorage.getItem('pp_token');
@@ -585,6 +672,11 @@
             if (json.success) {
                 // Set language dropdown
                 document.getElementById('prefLanguage').value = json.language;
+                // Resolve actual language for display
+                let actualLang = json.language;
+                if (actualLang === 'default') {
+                    actualLang = await resolveDefaultLanguage();
+                }
                 // Set timezone dropdown
                 document.getElementById('prefTimezone').value = json.timezone || 'auto';
                 TZ.set(json.timezone || 'auto');
@@ -598,14 +690,30 @@
                     localStorage.setItem('pp_theme', json.theme);
                     applyTheme(json.theme === 'system' ? getSystemTheme() : json.theme);
                 }
-                if (json.language !== cachedLang) {
-                    localStorage.setItem('pp-lang', json.language);
-                    if (I18N.locale !== json.language) {
-                        await I18N.setLocale(json.language);
+                if (actualLang !== cachedLang) {
+                    localStorage.setItem('pp-lang', actualLang);
+                    if (I18N.locale !== actualLang) {
+                        await I18N.setLocale(actualLang);
                     }
                 }
             }
         } catch(e) { /* ignore */ }
+    }
+
+    async function resolveDefaultLanguage() {
+        try {
+            const resp = await authFetch('/api/v1/admin/settings/system');
+            const json = await resp.json();
+            if (json.success) {
+                const sysLang = json.data.default_language;
+                if (sysLang && sysLang !== 'auto') return sysLang;
+            }
+        } catch(_) {}
+        // Fallback: detect from browser
+        const nav = navigator.language;
+        if (nav.startsWith('zh')) return nav.includes('TW') || nav.includes('HK') ? 'zh-TW' : 'zh-CN';
+        if (nav.startsWith('ja')) return 'ja';
+        return 'en';
     }
 
     async function savePreferences() {
@@ -780,6 +888,7 @@
         loadUserInfo();
         loadPreferences();
         loadApiKeys();
+        upgradeSelects();
     });
     </script>
 </body>

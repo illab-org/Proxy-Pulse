@@ -129,7 +129,7 @@ pub async fn save_preferences(
         serde_json::from_slice(&body_bytes).map_err(|_| err("Invalid request body"))?;
 
     let valid_themes = ["system", "light", "dark"];
-    let valid_langs = ["en", "zh-CN", "zh-TW", "ja"];
+    let valid_langs = ["default", "en", "zh-CN", "zh-TW", "ja"];
     if !valid_themes.contains(&body.theme.as_str())
         || !valid_langs.contains(&body.language.as_str())
     {

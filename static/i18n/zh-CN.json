@@ -87,7 +87,8 @@
         "save_preferences": "保存设置",
         "preferences_saved": "设置已保存",
         "timezone": "时区",
-        "timezone_auto": "自动（浏览器）"
+        "timezone_auto": "自动（浏览器）",
+        "language_default": "系统默认"
     },
     "admin": {
         "title": "Proxy Pulse — 管理面板",
@@ -250,7 +251,11 @@
         "import_db": "导入数据库",
         "db_import_hint": "导入 SQLite 数据库文件以替换当前数据。导入后服务将自动重启。",
         "confirm_import_db": "确定要导入吗？这将替换当前数据库，导入后服务将自动重启。",
-        "db_imported": "数据库已导入，服务将自动重启。"
+        "db_imported": "数据库已导入，服务将自动重启。",
+        "binary_not_ready": "版本正在编译中，请稍后再试。",
+        "exporting_db": "正在导出数据库...",
+        "importing_db": "正在导入数据库...",
+        "export_failed": "导出失败"
     },
     "lang": {
         "en": "English",

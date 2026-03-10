@@ -167,6 +167,35 @@
             padding-right: 36px;
             cursor: pointer;
         }
+        /* Custom dropdown */
+        .custom-select { position: relative; display: inline-block; }
+        .custom-select-trigger {
+            display: flex; align-items: center; justify-content: space-between; gap: 8px;
+            padding: 10px 14px; background: rgba(10, 14, 26, 0.6);
+            border: 1px solid var(--border-subtle); border-radius: 8px;
+            color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;
+            cursor: pointer; transition: var(--transition); min-width: 160px; box-sizing: border-box;
+        }
+        .custom-select-trigger:hover { border-color: var(--text-dim); }
+        .custom-select-trigger.open { border-color: var(--accent-cyan); box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.1); }
+        .custom-select-trigger svg { width: 12px; height: 12px; color: var(--text-dim); flex-shrink: 0; transition: transform 0.2s; }
+        .custom-select-trigger.open svg { transform: rotate(180deg); }
+        .custom-select-dropdown {
+            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+            background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px;
+            padding: 4px; z-index: 9999; display: none;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4); backdrop-filter: blur(16px);
+            max-height: 240px; overflow-y: auto;
+        }
+        .custom-select-dropdown.show { display: block; }
+        .custom-select-option {
+            padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+            color: var(--text-secondary); transition: all 0.15s;
+        }
+        .custom-select-option:hover { background: rgba(0, 240, 255, 0.08); color: var(--text-primary); }
+        .custom-select-option.selected { background: rgba(0, 240, 255, 0.12); color: var(--accent-cyan); font-weight: 500; }
+        [data-theme="light"] .custom-select-trigger { background: rgba(241, 245, 249, 0.8); }
+        [data-theme="light"] .custom-select-dropdown { background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
         .form-textarea {
             min-height: 140px;
             resize: vertical;
@@ -842,6 +871,19 @@
     <!-- Toast container -->
     <div class="toast-container" id="toastContainer"></div>
 
+    <!-- Progress Bar (fixed top-right) -->
+    <div id="progressOverlay" style="display:none;position:fixed;top:16px;right:16px;z-index:10000;min-width:280px;">
+        <div style="background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:12px;padding:14px 18px;backdrop-filter:blur(16px);box-shadow:0 8px 32px rgba(0,0,0,0.3);">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                <div class="spinner" style="width:16px;height:16px;"></div>
+                <span id="progressLabel" style="font-size:0.82rem;color:var(--text-primary);font-weight:500;"></span>
+            </div>
+            <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;">
+                <div id="progressBar" style="height:100%;background:var(--gradient-primary);border-radius:2px;transition:width 0.3s;width:0%;"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Header -->
     <header class="header">
         <div class="header-left">
@@ -1324,46 +1366,49 @@
                 </div>
             </div>
 
-            <!-- Auto Update Card -->
-            <div class="update-card" style="margin-bottom:20px;">
-                <div class="update-card-accent" style="background:linear-gradient(135deg, #7b61ff 0%, #3b82f6 100%);"></div>
-                <div class="auto-update-row">
-                    <div class="update-card-icon icon-auto">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
-                        </svg>
+            <!-- Auto Update & Install Schedule Cards (side by side) -->
+            <div class="update-grid">
+                <!-- Auto Update Card -->
+                <div class="update-card">
+                    <div class="update-card-accent" style="background:linear-gradient(135deg, #7b61ff 0%, #3b82f6 100%);"></div>
+                    <div class="auto-update-row">
+                        <div class="update-card-icon icon-auto">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+                            </svg>
+                        </div>
+                        <div class="auto-update-info">
+                            <div class="auto-update-title" data-i18n="admin.auto_update">Auto Update</div>
+                            <div class="auto-update-desc" data-i18n="admin.auto_update_hint">When enabled, the system periodically checks for new releases and updates automatically</div>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="systemAutoUpdate" checked onchange="saveAutoUpdateToggle(this.checked)">
+                            <span class="toggle-slider"></span>
+                        </label>
                     </div>
-                    <div class="auto-update-info">
-                        <div class="auto-update-title" data-i18n="admin.auto_update">Auto Update</div>
-                        <div class="auto-update-desc" data-i18n="admin.auto_update_hint">When enabled, the system periodically checks for new releases and updates automatically</div>
-                    </div>
-                    <label class="toggle">
-                        <input type="checkbox" id="systemAutoUpdate" checked onchange="saveAutoUpdateToggle(this.checked)">
-                        <span class="toggle-slider"></span>
-                    </label>
                 </div>
-            </div>
 
-            <!-- Install Schedule Card -->
-            <div class="update-card" style="margin-bottom:20px;">
-                <div class="update-card-accent" style="background:linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);"></div>
-                <div class="auto-update-row">
-                    <div class="update-card-icon" style="background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(6,182,212,0.15));color:var(--accent-blue);border:1px solid rgba(59,130,246,0.2);">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-                        </svg>
+                <!-- Install Schedule Card -->
+                <div class="update-card">
+                    <div class="update-card-accent" style="background:linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);"></div>
+                    <div class="auto-update-row">
+                        <div class="update-card-icon" style="background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(6,182,212,0.15));color:var(--accent-blue);border:1px solid rgba(59,130,246,0.2);">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                        </div>
+                        <div class="auto-update-info">
+                            <div class="auto-update-title" data-i18n="admin.install_schedule">Install Schedule</div>
+                            <div class="auto-update-desc" data-i18n="admin.install_schedule_hint">Choose when automatic updates can be installed</div>
+                        </div>
+                        <select class="form-select" id="systemInstallSchedule" onchange="saveInstallSchedule(this.value)" style="min-width:180px;padding:6px 30px 6px 10px;font-size:0.82rem;">
+                            <option value="anytime" data-i18n="admin.schedule_anytime">Anytime</option>
+                            <option value="night" data-i18n="admin.schedule_night">Night (00:00–06:00)</option>
+                            <option value="morning" data-i18n="admin.schedule_morning">Morning (06:00–12:00)</option>
+                            <option value="afternoon" data-i18n="admin.schedule_afternoon">Afternoon (12:00–18:00)</option>
+                            <option value="evening" data-i18n="admin.schedule_evening">Evening (18:00–00:00)</option>
+                        </select>
                     </div>
-                    <div class="auto-update-info">
-                        <div class="auto-update-title" data-i18n="admin.install_schedule">Install Schedule</div>
-                        <div class="auto-update-desc" data-i18n="admin.install_schedule_hint">Choose when automatic updates can be installed</div>
-                    </div>
-                    <select class="form-select" id="systemInstallSchedule" onchange="saveInstallSchedule(this.value)" style="min-width:180px;padding:6px 30px 6px 10px;font-size:0.82rem;">
-                        <option value="anytime" data-i18n="admin.schedule_anytime">Anytime</option>
-                        <option value="night" data-i18n="admin.schedule_night">Night (00:00–06:00)</option>
-                        <option value="morning" data-i18n="admin.schedule_morning">Morning (06:00–12:00)</option>
-                        <option value="afternoon" data-i18n="admin.schedule_afternoon">Afternoon (12:00–18:00)</option>
-                        <option value="evening" data-i18n="admin.schedule_evening">Evening (18:00–00:00)</option>
-                    </select>
                 </div>
             </div>
 
@@ -1616,6 +1661,67 @@
     const proxyPerPage = 25;
     let isDemoMode = false;
 
+    // ─── Custom Select Dropdown ───
+    function upgradeSelects() {
+        document.querySelectorAll('select.form-select').forEach(sel => {
+            if (sel.dataset.upgraded) return;
+            sel.dataset.upgraded = '1';
+            sel.style.display = 'none';
+            const wrap = document.createElement('div');
+            wrap.className = 'custom-select';
+            if (sel.style.minWidth) wrap.style.minWidth = sel.style.minWidth;
+            if (sel.style.width) wrap.style.width = sel.style.width;
+            sel.parentNode.insertBefore(wrap, sel);
+            wrap.appendChild(sel);
+            const trigger = document.createElement('div');
+            trigger.className = 'custom-select-trigger';
+            trigger.innerHTML = '<span></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>';
+            wrap.appendChild(trigger);
+            const dropdown = document.createElement('div');
+            dropdown.className = 'custom-select-dropdown';
+            wrap.appendChild(dropdown);
+            function buildOptions() {
+                dropdown.innerHTML = '';
+                Array.from(sel.options).forEach(opt => {
+                    const item = document.createElement('div');
+                    item.className = 'custom-select-option' + (opt.value === sel.value ? ' selected' : '');
+                    item.textContent = opt.textContent;
+                    item.dataset.value = opt.value;
+                    item.addEventListener('click', e => {
+                        e.stopPropagation();
+                        sel.value = opt.value;
+                        sel.dispatchEvent(new Event('change'));
+                        trigger.querySelector('span').textContent = opt.textContent;
+                        dropdown.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
+                        item.classList.add('selected');
+                        dropdown.classList.remove('show');
+                        trigger.classList.remove('open');
+                    });
+                    dropdown.appendChild(item);
+                });
+                const curOpt = sel.options[sel.selectedIndex];
+                trigger.querySelector('span').textContent = curOpt ? curOpt.textContent : '';
+            }
+            buildOptions();
+            sel._csRebuild = buildOptions;
+            trigger.addEventListener('click', e => {
+                e.stopPropagation();
+                const isOpen = dropdown.classList.contains('show');
+                document.querySelectorAll('.custom-select-dropdown.show').forEach(d => { d.classList.remove('show'); d.previousElementSibling.classList.remove('open'); });
+                if (!isOpen) { dropdown.classList.add('show'); trigger.classList.add('open'); }
+            });
+            // Sync when value is set programmatically
+            const desc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+            Object.defineProperty(sel, 'value', {
+                get() { return desc.get.call(this); },
+                set(v) { desc.set.call(this, v); const o = this.options[this.selectedIndex]; if (o) trigger.querySelector('span').textContent = o.textContent; }
+            });
+        });
+    }
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.custom-select-dropdown.show').forEach(d => { d.classList.remove('show'); d.previousElementSibling.classList.remove('open'); });
+    });
+
     // Auth-aware fetch wrapper
     function authFetch(url, options = {}) {
         const token = localStorage.getItem('pp_token');
@@ -1735,6 +1841,7 @@
 
     TZ.init();
     I18N.init().then(() => {
+        upgradeSelects();
         loadUserInfo();
         loadPreferences();
         loadProxies();
@@ -1747,6 +1854,8 @@
             loadProxies();
             loadSources();
             loadUsers();
+            // Rebuild custom selects after i18n text update
+            document.querySelectorAll('select.form-select').forEach(s => { if (s._csRebuild) s._csRebuild(); });
         });
     });
 
@@ -2429,6 +2538,10 @@
             const json = await resp.json();
             if (json.success) {
                 showToast(I18N.t('admin.update_triggered') || 'Update triggered. The service will restart automatically.', 'success');
+            } else if (json.error === 'BINARY_NOT_READY') {
+                showToast(I18N.t('admin.binary_not_ready') || 'The release is being compiled. Please try again later.', 'warning');
+                btn.disabled = false;
+                btn.querySelector('span').textContent = I18N.t('admin.update_now') || 'Update Now';
             } else {
                 showToast(json.error || 'Update failed', 'error');
                 btn.disabled = false;
@@ -2521,13 +2634,45 @@
         }
     }
 
+    // ─── Progress Bar Helper ───
+    function showProgress(label) {
+        document.getElementById('progressLabel').textContent = label;
+        document.getElementById('progressBar').style.width = '0%';
+        document.getElementById('progressOverlay').style.display = '';
+    }
+    function updateProgress(pct) {
+        document.getElementById('progressBar').style.width = Math.min(pct, 100) + '%';
+    }
+    function hideProgress() {
+        document.getElementById('progressOverlay').style.display = 'none';
+    }
+
     // ─── Database Export/Import ───
     async function exportDatabase() {
         if (demoGuard()) return;
+        showProgress(I18N.t('admin.exporting_db') || 'Exporting database...');
+        updateProgress(10);
         try {
             const resp = await authFetch('/api/v1/admin/db/export');
             if (!resp.ok) throw new Error('Export failed');
-            const blob = await resp.blob();
+            updateProgress(40);
+            const reader = resp.body.getReader();
+            const contentLength = +resp.headers.get('Content-Length') || 0;
+            const chunks = [];
+            let received = 0;
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value);
+                received += value.length;
+                if (contentLength > 0) {
+                    updateProgress(40 + (received / contentLength) * 55);
+                } else {
+                    updateProgress(Math.min(90, 40 + received / 10000));
+                }
+            }
+            updateProgress(98);
+            const blob = new Blob(chunks);
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -2536,8 +2681,11 @@
             a.click();
             a.remove();
             URL.revokeObjectURL(url);
+            updateProgress(100);
+            setTimeout(hideProgress, 600);
         } catch(e) {
-            showToast('Export failed', 'error');
+            hideProgress();
+            showToast(I18N.t('admin.export_failed') || 'Export failed', 'error');
         }
     }
 
@@ -2548,20 +2696,39 @@
         if (!file) return;
         const confirmMsg = I18N.t('admin.confirm_import_db') || 'Are you sure? This will replace the current database and the service will restart automatically.';
         if (!confirm(confirmMsg)) { input.value = ''; return; }
+        showProgress(I18N.t('admin.importing_db') || 'Importing database...');
+        updateProgress(10);
         const formData = new FormData();
         formData.append('file', file);
         try {
-            const resp = await authFetch('/api/v1/admin/db/import', {
-                method: 'POST',
-                body: formData,
+            const xhr = new XMLHttpRequest();
+            const token = localStorage.getItem('pp-token');
+            xhr.open('POST', '/api/v1/admin/db/import');
+            if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+            xhr.upload.onprogress = function(e) {
+                if (e.lengthComputable) updateProgress(10 + (e.loaded / e.total) * 80);
+            };
+            await new Promise((resolve, reject) => {
+                xhr.onload = function() {
+                    updateProgress(95);
+                    try {
+                        const json = JSON.parse(xhr.responseText);
+                        if (json.success) {
+                            updateProgress(100);
+                            setTimeout(hideProgress, 600);
+                            showToast(I18N.t('admin.db_imported') || 'Database imported. The service will restart automatically.', 'success');
+                        } else {
+                            hideProgress();
+                            showToast(json.error || 'Import failed', 'error');
+                        }
+                    } catch(_) { hideProgress(); showToast('Import failed', 'error'); }
+                    resolve();
+                };
+                xhr.onerror = function() { hideProgress(); showToast('Import failed', 'error'); reject(); };
+                xhr.send(formData);
             });
-            const json = await resp.json();
-            if (json.success) {
-                showToast(I18N.t('admin.db_imported') || 'Database imported. The service will restart automatically.', 'success');
-            } else {
-                showToast(json.error || 'Import failed', 'error');
-            }
         } catch(e) {
+            hideProgress();
             showToast('Error: ' + e.message, 'error');
         } finally {
             input.value = '';
