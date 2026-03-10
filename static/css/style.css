@@ -598,6 +598,8 @@ body {
 .chart-card.api-links-card {
     overflow: visible;
     min-width: 0;
+    position: relative;
+    z-index: 2;
 }
 
 .chart-card:hover, .table-card:hover {

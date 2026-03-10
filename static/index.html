@@ -193,19 +193,6 @@
                         </div>
                     </div>
                     <div class="api-toggle-group">
-                        <label class="api-toggle-label" data-i18n="dashboard.api_token">Token</label>
-                        <div style="display:flex;gap:8px;align-items:center;flex:1;max-width:400px;">
-                            <div class="token-dropdown" id="tokenDropdown">
-                                <button class="token-dropdown-trigger" id="tokenDropdownTrigger" onclick="toggleTokenDropdown()">
-                                    <span class="token-dropdown-text" id="tokenDropdownText" data-i18n="dashboard.api_token_none">Select Token</span>
-                                    <svg class="token-dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>
-                                </button>
-                                <div class="token-dropdown-menu" id="tokenDropdownMenu"></div>
-                                <input type="hidden" id="apiTokenSelect" value="">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="api-toggle-group">
                         <label class="api-toggle-label" data-i18n="dashboard.api_country">Country</label>
                         <div style="display:flex;gap:8px;align-items:center;flex:1;max-width:400px;">
                             <div class="country-dropdown" id="countryDropdown">
@@ -220,6 +207,19 @@
                                     <div class="country-dropdown-list" id="countryDropdownList"></div>
                                 </div>
                                 <input type="hidden" id="apiCountrySelect" value="all">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="api-toggle-group">
+                        <label class="api-toggle-label" data-i18n="dashboard.api_token">Token</label>
+                        <div style="display:flex;gap:8px;align-items:center;flex:1;max-width:400px;">
+                            <div class="token-dropdown" id="tokenDropdown">
+                                <button class="token-dropdown-trigger" id="tokenDropdownTrigger" onclick="toggleTokenDropdown()">
+                                    <span class="token-dropdown-text" id="tokenDropdownText" data-i18n="dashboard.api_token_none">Select Token</span>
+                                    <svg class="token-dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>
+                                </button>
+                                <div class="token-dropdown-menu" id="tokenDropdownMenu"></div>
+                                <input type="hidden" id="apiTokenSelect" value="">
                             </div>
                         </div>
                     </div>
