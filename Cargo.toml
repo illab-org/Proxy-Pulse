@@ -54,6 +54,12 @@ tikv-jemallocator = { version = "0.6", features = ["unprefixed_malloc_on_support
 tikv-jemalloc-ctl = { version = "0.6", features = ["stats"] }
 
 [profile.release]
+opt-level = 3
+lto = "thin"
+strip = true
+codegen-units = 1
+
+[profile.release]
 lto = true
 codegen-units = 1
 strip = true
