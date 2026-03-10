@@ -11,17 +11,19 @@ permissions:
 jobs:
   docker:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v') }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract version from tag
+      - name: Get latest release version
         id: meta
         run: |
-          TAG="${{ github.event.workflow_run.head_branch }}"
+          TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName')
           VERSION=${TAG#v}
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Download Linux binaries from release
         run: |
