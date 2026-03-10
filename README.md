@@ -6,9 +6,8 @@
 [![Language](https://img.shields.io/badge/language-Rust-orange.svg)]()
 [![Axum](https://img.shields.io/badge/web-axum%200.7-blue.svg)]()
 [![SQLite](https://img.shields.io/badge/database-SQLite-003B57.svg)]()
-[![Docker](https://img.shields.io/docker/v/openinfralabs/proxy-pulse?label=Docker%20Hub&color=2496ED)](https://hub.docker.com/r/openinfralabs/proxy-pulse)
 
-> **[中文文档](README_CN.md)** | **[Legal Disclaimer](DISCLAIMER.md)** | **[Terms of Use](TERMS_OF_USE.md)**
+> **[中文文档](docs/README_CN.md)** | **[Legal Terms](docs/LEGAL.md)**
 
 ---
 
@@ -31,7 +30,7 @@ This project is built exclusively for **lawful and compliant** purposes, includi
 | **CDN & Edge Testing** | Verify content delivery and edge node accessibility across distributed infrastructure. |
 | **Automated QA Pipelines** | Integrate proxy health checks into CI/CD workflows to ensure test environments are reachable. |
 
-> **⚠️ This software is NOT designed, intended, or authorized for bypassing network security controls, circumventing internet censorship, accessing restricted content, or any activity that violates applicable laws and regulations.** See [DISCLAIMER.md](DISCLAIMER.md) and [TERMS_OF_USE.md](TERMS_OF_USE.md) for full details.
+> **⚠️ This software is NOT designed, intended, or authorized for bypassing network security controls, circumventing internet censorship, accessing restricted content, or any activity that violates applicable laws and regulations.** See [Legal Terms](docs/LEGAL.md) for full details.
 
 ---
 
@@ -57,7 +56,7 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/OpenInfra-Labs/Proxy-P
 
 | Command | Description |
 |---------|-------------|
-| `./run` | Start (auto-downloads binary + config) |
+| `./run` | Start (auto-downloads latest binary) |
 | `./run status` | Check if running |
 | `./run stop` | Stop the service |
 | `./run update` | Update script & binary to latest |
@@ -65,16 +64,9 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/OpenInfra-Labs/Proxy-P
 The `run` script automatically:
 - Detects your OS and CPU architecture (Linux, macOS, Windows × amd64/arm64)
 - Downloads the correct pre-compiled binary from GitHub Releases
-- Downloads `config.example.yaml` and creates `config.yaml` if not present
 - Checks for script and binary updates on every start
 - Opens the dashboard in your browser (on desktop systems)
 - Starts the service in the background
-
-**Docker:**
-
-```bash
-docker run -d --name proxy-pulse -p 8080:8080 openinfralabs/proxy-pulse:latest
-```
 
 ---
 
@@ -100,50 +92,38 @@ cargo build --release
 
 ### Configuration
 
-Copy the example configuration and edit as needed:
+Proxy Pulse works out of the box with sensible defaults. All settings are managed via environment variables and the Admin Panel:
 
-```bash
-cp config.example.yaml config.yaml
-```
+**Environment Variables:**
 
-```yaml
-server:
-  host: "0.0.0.0"
-  port: 8080
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | `sqlite://proxy_pulse.db?mode=rwc` | Database connection URL |
+| `HOST` | `0.0.0.0` | Listen address |
+| `PORT` | `8080` | Listen port |
 
-database:
-  url: "sqlite://proxy_pulse.db?mode=rwc"
+**Checker Settings** (via Admin Panel → Checker Settings):
 
-sources:
-  sync_interval_secs: 1800       # Global provider sync interval (30 min)
-  providers:
-    - type: file
-      path: ./proxies.txt        # One proxy per line: ip:port
-    # - type: url
-    #   url: https://example.com/proxy-list.txt
-
-checker:
-  interval_secs: 60              # Check cycle interval (1 min)
-  timeout_secs: 10               # Per-proxy timeout
-  max_concurrent: 200            # Concurrent check tasks
-  targets:                       # Health check target URLs (checked in parallel)
-    - https://httpbin.org/ip
-    - https://www.cloudflare.com/cdn-cgi/trace
-
-scoring:
-  min_score: 60                  # Minimum score for "healthy" proxies
-```
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Check Interval | 60s | How often proxies are checked |
+| Request Timeout | 10s | Per-proxy timeout |
+| Max Concurrent | 200 | Concurrent check tasks |
+| Check Targets | httpbin.org, cloudflare.com | Health check target URLs |
 
 ### Run
 
 ```bash
-# Run with default config.yaml
+# Run with defaults
 cargo run --release
 
-# Or specify a config path
-cargo run --release -- /path/to/config.yaml
+# Custom database path
+DATABASE_URL="sqlite:///data/proxy.db?mode=rwc" cargo run --release
 
-# Run in demo mode (all write APIs return 403)
+# Custom port
+PORT=3000 cargo run --release
+
+# Demo mode (all write APIs return 403)
 cargo run --release -- --demo
 ```
 
@@ -166,51 +146,12 @@ After=network.target
 Type=simple
 WorkingDirectory=/opt/proxy-pulse
 ExecStart=/opt/proxy-pulse/proxy-pulse
+Environment=PORT=8080
 Restart=on-failure
 RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
-```
-
-### Docker
-
-Pre-built multi-arch images (amd64/arm64) are available on Docker Hub:
-
-```bash
-# Quick start with default config
-docker run -d --name proxy-pulse -p 8080:8080 openinfralabs/proxy-pulse:latest
-
-# With custom config
-docker run -d --name proxy-pulse \
-  -p 8080:8080 \
-  -v $(pwd)/config.yaml:/app/config.yaml \
-  -v $(pwd)/data:/app \
-  openinfralabs/proxy-pulse:latest
-
-# With Docker Compose
-```
-
-Create a `docker-compose.yml`:
-
-```yaml
-services:
-  proxy-pulse:
-    image: openinfralabs/proxy-pulse:latest
-    container_name: proxy-pulse
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./config.yaml:/app/config.yaml
-      - proxy-pulse-data:/app
-    restart: unless-stopped
-
-volumes:
-  proxy-pulse-data:
-```
-
-```bash
-docker compose up -d
 ```
 
 ---
@@ -220,7 +161,6 @@ docker compose up -d
 ### 1. Subscription Source Management
 Aggregate proxies from multiple configurable sources via the Admin Panel:
 - **URL subscriptions** — GitHub-hosted lists, internal registries, public proxy APIs
-- **Local file sources** — Static proxy lists
 - **Per-source sync intervals** — Each subscription can have its own sync frequency (5 min to 24 hours)
 
 Sources can be added, removed, enabled/disabled, and manually synced from the admin interface.
@@ -252,14 +192,15 @@ Intelligent backoff mechanism to reduce unnecessary checks on failing proxies. S
 | 9+ | 48 hours |
 
 ### 5. Proxy Health Scoring
-Each proxy receives a composite health score (0–100) based on four weighted components:
+Each proxy receives a composite health score (0–100) based on five weighted components:
 
 | Component | Max Score | Calculation |
 |---|---|---|
-| **Success Rate** | 50 pts | `(successes / total_checks) × 50` |
-| **Success Count** | 10 pts | `min(success_count, 10)` |
-| **Country Detection** | 10 pts | Known country = 10, unknown = 0 |
-| **Latency** | 30 pts | ≤50ms = 30, ≥10000ms = 0, linear interpolation |
+| **Success Rate** | 60 pts | `success_rate × 60` |
+| **Success Count** | 10 pts | Relative to the highest success count in the pool |
+| **Country Tier** | 6 pts | Tier 1 (US, GB, DE, JP, SG…) = 6, Tier 2 = 4.5, Tier 3 = 3 |
+| **Protocol Type** | 4 pts | SOCKS5 = 4, HTTPS = 3, SOCKS4 = 2, HTTP = 1 |
+| **Latency** | 20 pts | ≤100ms = 20, ≥5000ms = 0, linear interpolation |
 
 ### 6. Proxy Metadata Detection
 Automatically detect proxy metadata:
@@ -285,15 +226,17 @@ GET  /api/v1/health                # Health check
 
 #### Admin Endpoints
 ```
-GET  /api/v1/admin/proxy/list      # List all proxies (with admin details)
-POST /api/v1/admin/proxy/import    # Bulk import proxies
-POST /api/v1/admin/proxy/purge-dead # Delete dead proxies
-POST /api/v1/admin/proxy/delete/:id # Delete a specific proxy
-GET  /api/v1/admin/source/list     # List subscription sources
-POST /api/v1/admin/source/add      # Add subscription source
-POST /api/v1/admin/source/delete/:id # Delete a source
-POST /api/v1/admin/source/:id/toggle # Enable/disable a source
-POST /api/v1/admin/source/sync     # Trigger manual sync
+GET  /api/v1/admin/proxy/list           # List all proxies (with admin details)
+POST /api/v1/admin/proxy/import         # Bulk import proxies
+POST /api/v1/admin/proxy/purge-dead     # Delete dead proxies
+POST /api/v1/admin/proxy/delete/:id     # Delete a specific proxy
+GET  /api/v1/admin/source/list          # List subscription sources
+POST /api/v1/admin/source/add           # Add subscription source
+POST /api/v1/admin/source/delete/:id    # Delete a source
+POST /api/v1/admin/source/:id/toggle    # Enable/disable a source
+POST /api/v1/admin/source/sync          # Trigger manual sync
+GET  /api/v1/admin/settings/checker     # Get checker configuration
+POST /api/v1/admin/settings/checker     # Save checker configuration
 ```
 
 Response example:
@@ -328,7 +271,8 @@ Full management interface:
 - Proxy list with status, score, latency, success/fail counts, next check time
 - Bulk import proxies (one per line)
 - Subscription source management with per-source sync intervals
-- Enable/disable sources, delete proxies, purge dead proxies
+- Checker settings (interval, timeout, concurrency, target URLs)
+- User management
 - Demo mode indicator (when `--demo` flag is used)
 
 ### 10. Internationalization (i18n)
@@ -358,8 +302,7 @@ Run with `--demo` flag to enable a read-only demo mode:
 | HTTP Client | reqwest 0.12 (with SOCKS support) |
 | Async Runtime | tokio |
 | Frontend | Vanilla HTML/CSS/JS + Chart.js 4.4 (embedded in binary) |
-| Container | Docker (multi-arch: amd64/arm64) |
-| CI/CD | GitHub Actions |
+| CI/CD | GitHub Actions (6-platform builds) |
 
 ---
 
@@ -369,38 +312,33 @@ Run with `--demo` flag to enable a read-only demo mode:
 Proxy-Pulse/
 ├── src/
 │   ├── main.rs          # Entry point, server setup
-│   ├── api.rs           # REST API routes & handlers
-│   ├── auth.rs          # Authentication & authorization
-│   ├── db.rs            # Database operations
-│   ├── models.rs        # Data structures
+│   ├── api/             # REST API routes (public + admin)
+│   ├── auth/            # Authentication, authorization, API keys
+│   ├── db/              # Database operations (proxies, stats, subscriptions, auth, settings)
 │   ├── checker.rs       # Proxy health checker & scorer
 │   ├── scheduler.rs     # Background task scheduler
-│   ├── sources.rs       # Proxy source providers
-│   ├── config.rs        # Configuration loader
+│   ├── sources.rs       # Proxy subscription source sync
+│   ├── config.rs        # Checker configuration definition
+│   ├── models.rs        # Data structures
 │   └── mem_monitor.rs   # Memory usage monitor
 ├── static/              # Frontend assets (embedded in binary)
 │   ├── index.html       # Dashboard page
-│   ├── admin.html       # Admin panel page
+│   ├── admin.html       # Admin panel
 │   ├── login.html       # Login page
 │   ├── settings.html    # Settings page
-│   ├── css/style.css    # Cyberpunk theme styles
-│   ├── js/
-│   │   ├── app.js       # Dashboard logic & charts
-│   │   └── i18n.js      # Internationalization engine
+│   ├── css/             # Cyberpunk theme styles
+│   ├── js/              # Dashboard logic + i18n engine
 │   └── i18n/            # Translation files (en, zh-CN, zh-TW, ja)
+├── docs/                # Documentation
+│   ├── README_CN.md     # Chinese documentation
+│   ├── LEGAL.md         # Legal terms (EN)
+│   └── LEGAL_CN.md      # Legal terms (CN)
 ├── .github/workflows/
-│   ├── release.yml      # Build & Release (6 platforms)
-│   └── docker.yml       # Docker Build & Push
-├── Dockerfile           # Multi-stage Docker build
-├── config.example.yaml  # Example configuration
+│   └── release.yml      # Build & Release (6 platforms)
 ├── run                  # Quick-start script (Linux/macOS)
 ├── run.ps1              # Quick-start script (Windows)
 ├── Cargo.toml           # Rust dependencies
-├── LICENSE              # MIT License
-├── DISCLAIMER.md        # Legal disclaimer (EN)
-├── DISCLAIMER_CN.md     # Legal disclaimer (CN)
-├── TERMS_OF_USE.md      # Terms of use (EN)
-└── TERMS_OF_USE_CN.md   # Terms of use (CN)
+└── LICENSE              # MIT License
 ```
 
 ---
@@ -415,13 +353,13 @@ This project is committed to full compliance with all applicable laws and regula
 - **Regulations on the Security Protection of Computer Information Systems** (《计算机信息系统安全保护条例》)
 - **Administrative Measures for Internet Information Services** (《互联网信息服务管理办法》)
 
-**Users are solely responsible for ensuring their use of this software complies with all applicable local, national, and international laws and regulations.** The maintainers do not endorse or encourage any illegal use. See [DISCLAIMER.md](DISCLAIMER.md) and [TERMS_OF_USE.md](TERMS_OF_USE.md) for complete legal terms.
+**Users are solely responsible for ensuring their use of this software complies with all applicable local, national, and international laws and regulations.** The maintainers do not endorse or encourage any illegal use. See [Legal Terms](docs/LEGAL.md) for complete details.
 
 ---
 
 ## Contributing
 
-Contributions are welcome! Please read our contributing guidelines and ensure all contributions comply with the project's legal and ethical standards.
+Contributions are welcome! Please ensure all contributions comply with the project's legal and ethical standards.
 
 ## License
 
@@ -431,4 +369,4 @@ Copyright (c) 2026 OpenInfra Labs.
 
 ---
 
-> **Disclaimer:** This software is provided for lawful purposes only. The authors and contributors assume no liability for misuse. See [DISCLAIMER.md](DISCLAIMER.md) for full terms.
+> **Disclaimer:** This software is provided for lawful purposes only. The authors and contributors assume no liability for misuse. See [Legal Terms](docs/LEGAL.md) for full details.

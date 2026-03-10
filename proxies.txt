@@ -1,8 +1,0 @@
-# Sample proxy list — one proxy per line
-# Format: ip:port or protocol://ip:port
-# Lines starting with # are comments
-
-# Example proxies (replace with real ones)
-# 1.2.3.4:8080
-# socks5://5.6.7.8:1080
-# https://9.10.11.12:443
