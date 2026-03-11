@@ -434,6 +434,11 @@ pub struct SystemSettingsRequest {
     pub default_theme: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct TriggerUpdateRequest {
+    pub version: Option<String>,
+}
+
 async fn admin_get_system_settings(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
@@ -647,11 +652,19 @@ async fn admin_get_releases() -> Json<serde_json::Value> {
 
 async fn admin_trigger_update(
     State(state): State<Arc<AppState>>,
+    body: Option<Json<TriggerUpdateRequest>>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
     demo_guard(&state)?;
 
-    // Check synchronously so we can return binary-not-ready error
-    match updater::manual_update().await {
+    let target_version = body.and_then(|b| b.version.clone());
+
+    let result = if let Some(ref ver) = target_version {
+        updater::update_to_version(ver).await
+    } else {
+        updater::manual_update().await
+    };
+
+    match result {
         Ok(true) => Ok(Json(serde_json::json!({
             "success": true,
             "data": { "message": "Update triggered. The service will restart automatically." }

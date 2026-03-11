@@ -807,6 +807,32 @@
             color: var(--text-dim);
             margin-left: auto;
         }
+        .release-install-btn, .release-rollback-btn {
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 3px 10px;
+            border-radius: 5px;
+            border: 1px solid;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .release-install-btn {
+            background: rgba(0, 230, 138, 0.1);
+            color: var(--accent-green);
+            border-color: rgba(0, 230, 138, 0.3);
+        }
+        .release-install-btn:hover { background: rgba(0, 230, 138, 0.2); }
+        .release-rollback-btn {
+            background: rgba(255, 165, 2, 0.1);
+            color: var(--accent-orange);
+            border-color: rgba(255, 165, 2, 0.3);
+        }
+        .release-rollback-btn:hover { background: rgba(255, 165, 2, 0.2); }
+        .release-install-btn:disabled, .release-rollback-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
         .release-section {
             background: var(--bg-card);
             border: 1px solid var(--border-subtle);
@@ -2496,17 +2522,21 @@
             const resp = await authFetch('/api/v1/admin/update/releases');
             const json = await resp.json();
             if (json.success && json.data.length > 0) {
-                countBadge.textContent = json.data.length;
+                const releases = json.data.slice(0, 10);
+                countBadge.textContent = releases.length;
                 const currentVersion = document.getElementById('currentVersionDisplay').textContent;
-                container.innerHTML = '<div class="release-timeline">' + json.data.map((r, i) => {
+                container.innerHTML = '<div class="release-timeline">' + releases.map((r, i) => {
                     const ver = r.version;
                     const isCurrent = ('v' + currentVersion.replace(/^v/, '')) === ver || currentVersion === ver;
                     const date = r.date ? new Date(r.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+                    const btnLabel = isCurrent ? '' : (i === 0 ? (I18N.t('admin.update_now') || 'Update Now') : (I18N.t('admin.rollback') || 'Rollback'));
+                    const btnClass = i === 0 ? 'release-install-btn' : 'release-rollback-btn';
                     return '<div class="release-item' + (isCurrent ? ' current' : '') + '">'
                         + '<div class="release-item-header">'
                         + '<span class="release-ver">' + escapeHtml(ver) + '</span>'
                         + (isCurrent ? '<span class="release-badge-current">' + (I18N.t('admin.current') || 'current') + '</span>' : '')
                         + '<span class="release-date">' + escapeHtml(date) + '</span>'
+                        + (!isCurrent ? '<button class="' + btnClass + '" onclick="installVersion(\'' + escapeHtml(ver) + '\', this)">' + btnLabel + '</button>' : '')
                         + '</div>'
                         + '</div>';
                 }).join('') + '</div>';
@@ -2553,6 +2583,36 @@
             showToast('Error: ' + e.message, 'error');
             btn.disabled = false;
             btn.querySelector('span').textContent = I18N.t('admin.update_now') || 'Update Now';
+        }
+    }
+
+    async function installVersion(version, btn) {
+        if (demoGuard()) return;
+        const origText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = I18N.t('admin.updating') || 'Updating...';
+        try {
+            const resp = await authFetch('/api/v1/admin/update/trigger', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ version }),
+            });
+            const json = await resp.json();
+            if (json.success) {
+                showToast(I18N.t('admin.update_triggered') || 'Update triggered. The service will restart automatically.', 'success');
+            } else if (json.error === 'BINARY_NOT_READY') {
+                showToast(I18N.t('admin.binary_not_ready') || 'The release is being compiled. Please try again later.', 'warning');
+                btn.disabled = false;
+                btn.textContent = origText;
+            } else {
+                showToast(json.error || 'Update failed', 'error');
+                btn.disabled = false;
+                btn.textContent = origText;
+            }
+        } catch(e) {
+            showToast('Error: ' + e.message, 'error');
+            btn.disabled = false;
+            btn.textContent = origText;
         }
     }
 

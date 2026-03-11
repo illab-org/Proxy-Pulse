@@ -120,6 +120,51 @@ pub async fn manual_update() -> anyhow::Result<bool> {
     check_and_update_inner(true).await
 }
 
+/// Update to a specific version (rollback or skip-ahead)
+pub async fn update_to_version(version: &str) -> anyhow::Result<bool> {
+    let current_version = env!("CARGO_PKG_VERSION");
+    let target = version.trim_start_matches('v');
+
+    if target == current_version {
+        return Ok(false);
+    }
+
+    let tag = if version.starts_with('v') {
+        version.to_string()
+    } else {
+        format!("v{}", version)
+    };
+
+    if !release_has_binary(&tag).await {
+        return Err(anyhow::anyhow!("BINARY_NOT_READY"));
+    }
+
+    info!(current = current_version, target = target, "Updating to specific version");
+
+    if is_docker() {
+        download_and_replace_binary(&tag).await?;
+        info!("Binary updated in Docker container, exiting for restart");
+        std::process::exit(0);
+    }
+
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    let run_script = find_or_download_run_script(&exe_dir).await?;
+    let status: std::process::ExitStatus = Command::new(&run_script)
+        .env("PP_VERSION", &tag)
+        .status()
+        .await?;
+
+    if !status.success() {
+        error!(code = ?status.code(), "Run script exited with error");
+    }
+
+    Ok(true)
+}
+
 async fn check_and_update_inner(manual: bool) -> anyhow::Result<bool> {
     let current_version = env!("CARGO_PKG_VERSION");
     let latest_tag = fetch_latest_version().await?;
