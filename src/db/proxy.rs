@@ -134,13 +134,6 @@ impl Database {
         Ok(())
     }
 
-    pub async fn get_max_success_count(&self) -> Result<i64> {
-        let row: (i64,) = sqlx::query_as("SELECT COALESCE(MAX(success_count), 0) FROM proxies")
-            .fetch_one(&self.pool)
-            .await?;
-        Ok(row.0)
-    }
-
     pub async fn update_proxy_metadata(
         &self,
         id: i64,

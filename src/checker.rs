@@ -62,9 +62,6 @@ async fn run_check_cycle_inner(
     let timeout = std::time::Duration::from_secs(checker_cfg.timeout_secs);
     let targets: Arc<[String]> = checker_cfg.targets.clone().into();
 
-    // Get the max success count across all proxies for relative scoring
-    let max_success_count = db.get_max_success_count().await.unwrap_or(0);
-
     let mut handles = Vec::new();
 
     for proxy in proxies {
@@ -73,7 +70,7 @@ async fn run_check_cycle_inner(
         let targets = targets.clone();
 
         let handle = tokio::spawn(async move {
-            let result = check_single_proxy(&db, &proxy, &targets, timeout, max_success_count).await;
+            let result = check_single_proxy(&db, &proxy, &targets, timeout).await;
             drop(permit);
             result
         });
@@ -109,7 +106,6 @@ async fn check_single_proxy(
     proxy: &Proxy,
     targets: &[String],
     timeout: std::time::Duration,
-    max_success_count: i64,
 ) -> Result<bool> {
     let proxy_addr = format!("{}:{}", proxy.ip, proxy.port);
 
@@ -198,7 +194,7 @@ async fn check_single_proxy(
         .await?;
 
     // Recalculate score
-    let score = calculate_score(proxy, any_success, avg_latency, max_success_count);
+    let score = calculate_score(proxy, any_success, avg_latency);
     db.update_proxy_score(proxy.id, score).await?;
 
     // Detect metadata from response if successful, reusing the proxy client
@@ -251,7 +247,7 @@ fn calculate_next_check(proxy: &Proxy, success: bool) -> chrono::NaiveDateTime {
 
 /// Calculate health score (0-100)
 ///   Success rate:   60 pts  (sigmoid: c=80%, k=15)
-///   Success count:  10 pts  (60% of max_success_count → full score)
+///   Success count:  10 pts  (100 successes → full score)
 ///   Country:         6 pts  (tier-based ranking)
 ///   Proxy type:      4 pts  (more secure = higher)
 ///   Latency:        20 pts  (≤100ms=20, ≥5000ms=0, linear)
@@ -259,7 +255,6 @@ fn calculate_score(
     proxy: &Proxy,
     current_success: bool,
     avg_latency: Option<f64>,
-    max_success_count: i64,
 ) -> f64 {
     let total_checks = proxy.success_count + proxy.fail_count + 1;
     let successes = proxy.success_count + if current_success { 1 } else { 0 };
@@ -268,13 +263,8 @@ fn calculate_score(
     let rate = successes as f64 / total_checks as f64;
     let success_rate_score = 60.0 / (1.0 + (-15.0_f64 * (rate - 0.80)).exp());
 
-    // Success count component (0-10): 60% of the top proxy's count = full 10
-    let success_count_score = if max_success_count > 0 {
-        let threshold = (max_success_count as f64 * 0.6).max(1.0);
-        ((successes as f64 / threshold) * 10.0).min(10.0)
-    } else {
-        0.0
-    };
+    // Success count component (0-10): 100 successes = full 10
+    let success_count_score = ((successes as f64 / 100.0) * 10.0).min(10.0);
 
     // Country component (0-6): tiered ranking
     let country_score = country_tier_score(&proxy.country);
