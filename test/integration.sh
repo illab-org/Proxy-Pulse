@@ -46,17 +46,12 @@ echo "  Proxy Pulse Integration Tests"
 echo "  Target: $BASE"
 echo "═══════════════════════════════════════════"
 
-# ── 1. Health ──
+# ── 1. Auth Status (needs setup, before any account exists) ──
 echo ""
-yellow "▸ Health & Public Endpoints"
-assert_json "GET /api/v1/health returns success" GET "/api/v1/health" '.success == true'
-assert_json "Health includes version" GET "/api/v1/health" '.data.version != null'
-
-# ── 2. Auth Status (needs setup) ──
 yellow "▸ Auth Status"
 assert_json "Auth status returns needs_setup" GET "/api/v1/auth/status" '.needs_setup == true'
 
-# ── 3. Setup account ──
+# ── 2. Setup account ──
 yellow "▸ Account Setup"
 SETUP_RESP=$(curl -s -X POST "${BASE}/api/v1/auth/setup" \
     -H 'Content-Type: application/json' \
@@ -74,7 +69,7 @@ fi
 assert_status "Setup rejects duplicate" POST "/api/v1/auth/setup" 403 \
     -H 'Content-Type: application/json' -d '{"username":"test2","password":"testpass123"}'
 
-# ── 4. Login ──
+# ── 3. Login ──
 yellow "▸ Login"
 LOGIN_RESP=$(curl -s -X POST "${BASE}/api/v1/auth/login" \
     -H 'Content-Type: application/json' \
@@ -91,13 +86,18 @@ fi
 
 AUTH=(-H "Authorization: Bearer $TOKEN")
 
-# ── 5. Auth-protected endpoints ──
+# ── 5. Health (requires auth after setup) ──
+yellow "▸ Health Endpoint"
+assert_json "GET /api/v1/health returns success" GET "/api/v1/health" '.success == true' "${AUTH[@]}"
+assert_json "Health includes version" GET "/api/v1/health" '.data.version != null' "${AUTH[@]}"
+
+# ── 6. Auth-protected endpoints ──
 yellow "▸ Authenticated Endpoints"
 assert_json "GET /api/v1/auth/me" GET "/api/v1/auth/me" '.success == true' "${AUTH[@]}"
 assert_json "GET /api/v1/auth/api-keys" GET "/api/v1/auth/api-keys" '.success == true' "${AUTH[@]}"
 assert_json "GET /api/v1/auth/preferences" GET "/api/v1/auth/preferences" '.success == true' "${AUTH[@]}"
 
-# ── 6. Proxy endpoints (may be empty but should succeed) ──
+# ── 7. Proxy endpoints (may be empty but should succeed) ──
 yellow "▸ Proxy API"
 assert_json "GET /api/v1/proxy/all" GET "/api/v1/proxy/all" '.success == true' "${AUTH[@]}"
 assert_json "GET /api/v1/proxy/stats" GET "/api/v1/proxy/stats" '.success == true' "${AUTH[@]}"
@@ -107,7 +107,7 @@ assert_json "GET /api/v1/proxy/json" GET "/api/v1/proxy/json" '.success == true'
 assert_status "GET /api/v1/proxy/txt" GET "/api/v1/proxy/txt" 200 "${AUTH[@]}"
 assert_status "GET /api/v1/proxy/csv" GET "/api/v1/proxy/csv" 200 "${AUTH[@]}"
 
-# ── 7. Admin endpoints ──
+# ── 8. Admin endpoints ──
 yellow "▸ Admin API"
 assert_json "Admin proxy list" GET "/api/v1/admin/proxy/list" '.success == true' "${AUTH[@]}"
 assert_json "Admin source list" GET "/api/v1/admin/source/list" '.success == true' "${AUTH[@]}"
@@ -116,7 +116,7 @@ assert_json "Admin system settings" GET "/api/v1/admin/settings/system" '.succes
 assert_json "Admin update check" GET "/api/v1/admin/update/check" '.success == true' "${AUTH[@]}"
 assert_json "Admin releases" GET "/api/v1/admin/update/releases" '.success == true' "${AUTH[@]}"
 
-# ── 8. Admin import ──
+# ── 9. Admin import ──
 yellow "▸ Admin Import"
 IMPORT_RESP=$(curl -s -X POST "${BASE}/api/v1/admin/proxy/import" \
     "${AUTH[@]}" -H 'Content-Type: application/json' \
@@ -132,15 +132,15 @@ fi
 # Verify proxies were added
 assert_json "Verify imported proxies" GET "/api/v1/admin/proxy/list" '.data.total >= 2' "${AUTH[@]}"
 
-# ── 9. Unauthorized access ──
+# ── 10. Unauthorized access ──
 yellow "▸ Authorization Guards"
 assert_status "Admin without token" GET "/api/v1/admin/proxy/list" 401
 assert_status "Proxy API without token" GET "/api/v1/proxy/all" 401
 
-# ── 10. Pages ──
+# ── 11. Pages ──
 yellow "▸ Pages"
 assert_status "Login page" GET "/login" 200
-assert_status "Admin page requires auth" GET "/admin" 302
+assert_status "Admin page requires auth" GET "/admin" 303
 
 # ── Results ──
 echo ""

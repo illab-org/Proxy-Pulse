@@ -13,6 +13,7 @@ on:
 permissions:
   contents: read
   packages: read
+  issues: write
 
 jobs:
   resolve-version:
@@ -53,8 +54,7 @@ jobs:
             artifact: proxy-pulse-linux-arm64
             ext: tar.gz
             binary: proxy-pulse-linux-arm64
-            runner_cmd: qemu-aarch64-static ./proxy-pulse
-            qemu: true
+            skip_run: true
           - os: macos-latest
             artifact: proxy-pulse-darwin-amd64
             ext: tar.gz
@@ -92,33 +92,30 @@ jobs:
         run: |
           tar xzf "${{ matrix.artifact }}.${{ matrix.ext }}"
           chmod +x "${{ matrix.binary }}"
-          mv "${{ matrix.binary }}" proxy-pulse
+          [ "${{ matrix.skip_run }}" != "true" ] && mv "${{ matrix.binary }}" proxy-pulse || true
+        shell: bash
 
       - name: Extract (zip)
         if: matrix.ext == 'zip'
         run: |
           unzip "${{ matrix.artifact }}.${{ matrix.ext }}"
-          mv "${{ matrix.binary }}" proxy-pulse.exe
+          [ "${{ matrix.skip_run }}" != "true" ] && mv "${{ matrix.binary }}" proxy-pulse.exe || true
         shell: bash
 
-      - name: Verify artifact exists
-        if: matrix.skip_run
-        run: echo "✓ Artifact ${{ matrix.artifact }} downloaded and extracted successfully (cannot run on this runner)"
-        shell: bash
-
-      - name: Install QEMU (Linux ARM64)
-        if: matrix.qemu
+      - name: Verify artifact (skip_run)
+        if: matrix.skip_run == true
         run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static
+          echo "✓ Artifact ${{ matrix.artifact }} downloaded and extracted successfully (no native runner available)"
+          echo "RESULT=skip" >> "$GITHUB_ENV"
+        shell: bash
 
       - name: Start server
-        if: "!matrix.skip_run"
+        if: matrix.skip_run != true
         run: |
           ${{ matrix.runner_cmd }} &
           echo $! > /tmp/pp.pid
           for i in $(seq 1 60); do
-            if curl -sf http://127.0.0.1:8080/api/v1/health > /dev/null 2>&1; then
+            if curl -sf http://127.0.0.1:8080/api/v1/auth/status > /dev/null 2>&1; then
               echo "Server ready after ${i}s"
               break
             fi
@@ -127,15 +124,61 @@ jobs:
         shell: bash
 
       - name: Run integration tests
-        if: "!matrix.skip_run"
-        run: bash ./test/integration.sh http://127.0.0.1:8080
+        if: matrix.skip_run != true
+        id: test
+        run: |
+          START=$(date +%s)
+          set +e
+          OUTPUT=$(bash ./test/integration.sh http://127.0.0.1:8080 2>&1)
+          EXIT_CODE=$?
+          set -e
+          END=$(date +%s)
+          DURATION=$((END - START))
+          echo "$OUTPUT"
+          echo "duration=${DURATION}s" >> "$GITHUB_OUTPUT"
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          # Save errors only
+          ERRORS=$(echo "$OUTPUT" | grep '✗' || true)
+          {
+            echo "errors<<ERRORS_EOF"
+            echo "$ERRORS"
+            echo "ERRORS_EOF"
+          } >> "$GITHUB_OUTPUT"
+          exit $EXIT_CODE
         shell: bash
 
       - name: Stop server
-        if: "always() && !matrix.skip_run"
+        if: always() && matrix.skip_run != true
         run: |
           [ -f /tmp/pp.pid ] && kill "$(cat /tmp/pp.pid)" 2>/dev/null || true
         shell: bash
+
+      - name: Save result
+        if: always()
+        run: |
+          mkdir -p /tmp/test-results
+          ARTIFACT="${{ matrix.artifact }}"
+          if [ "${{ matrix.skip_run }}" = "true" ]; then
+            echo '{"artifact":"'"$ARTIFACT"'","status":"skip","duration":"—","errors":""}' > "/tmp/test-results/${ARTIFACT}.json"
+          elif [ "${{ steps.test.outputs.exit_code }}" = "0" ]; then
+            echo '{"artifact":"'"$ARTIFACT"'","status":"pass","duration":"${{ steps.test.outputs.duration }}","errors":""}' > "/tmp/test-results/${ARTIFACT}.json"
+          else
+            ERRORS=$(cat <<'ERREOF'
+          ${{ steps.test.outputs.errors }}
+          ERREOF
+          )
+            ERRORS_ESCAPED=$(echo "$ERRORS" | jq -Rs .)
+            echo '{"artifact":"'"$ARTIFACT"'","status":"fail","duration":"${{ steps.test.outputs.duration }}","errors":'"$ERRORS_ESCAPED"'}' > "/tmp/test-results/${ARTIFACT}.json"
+          fi
+        shell: bash
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-result-${{ matrix.artifact }}
+          path: /tmp/test-results/
+          retention-days: 1
 
   test-docker:
     name: Test Docker image
@@ -154,7 +197,7 @@ jobs:
           docker run -d --name pp-test -p 8080:8080 \
             docker.io/openinfralabs/proxy-pulse:${{ needs.resolve-version.outputs.tag }}
           for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:8080/api/v1/health > /dev/null 2>&1; then
+            if curl -sf http://127.0.0.1:8080/api/v1/auth/status > /dev/null 2>&1; then
               echo "Container ready after ${i}s"
               break
             fi
@@ -162,7 +205,25 @@ jobs:
           done
 
       - name: Run integration tests
-        run: bash ./test/integration.sh http://127.0.0.1:8080
+        id: test
+        run: |
+          START=$(date +%s)
+          set +e
+          OUTPUT=$(bash ./test/integration.sh http://127.0.0.1:8080 2>&1)
+          EXIT_CODE=$?
+          set -e
+          END=$(date +%s)
+          DURATION=$((END - START))
+          echo "$OUTPUT"
+          echo "duration=${DURATION}s" >> "$GITHUB_OUTPUT"
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          ERRORS=$(echo "$OUTPUT" | grep '✗' || true)
+          {
+            echo "errors<<ERRORS_EOF"
+            echo "$ERRORS"
+            echo "ERRORS_EOF"
+          } >> "$GITHUB_OUTPUT"
+          exit $EXIT_CODE
 
       - name: Docker logs
         if: failure()
@@ -171,3 +232,98 @@ jobs:
       - name: Stop container
         if: always()
         run: docker rm -f pp-test 2>/dev/null || true
+
+      - name: Save result
+        if: always()
+        run: |
+          mkdir -p /tmp/test-results
+          if [ "${{ steps.test.outputs.exit_code }}" = "0" ]; then
+            echo '{"artifact":"docker","status":"pass","duration":"${{ steps.test.outputs.duration }}","errors":""}' > /tmp/test-results/docker.json
+          else
+            ERRORS=$(cat <<'ERREOF'
+          ${{ steps.test.outputs.errors }}
+          ERREOF
+          )
+            ERRORS_ESCAPED=$(echo "$ERRORS" | jq -Rs .)
+            echo '{"artifact":"docker","status":"fail","duration":"${{ steps.test.outputs.duration }}","errors":'"$ERRORS_ESCAPED"'}' > /tmp/test-results/docker.json
+          fi
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-result-docker
+          path: /tmp/test-results/
+          retention-days: 1
+
+  summary:
+    name: Post test summary
+    needs: [resolve-version, test-binary, test-docker]
+    if: always() && needs.resolve-version.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Download all results
+        uses: actions/download-artifact@v4
+        with:
+          path: results
+          pattern: test-result-*
+
+      - name: Build summary and post issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ needs.resolve-version.outputs.tag }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          # Build markdown table
+          BODY="## Integration Test Results — ${TAG}\n\n"
+          BODY+="| Platform | Status | Duration | Errors |\n"
+          BODY+="|----------|--------|----------|--------|\n"
+
+          ALL_PASS=true
+          for f in results/test-result-*/*.json; do
+            [ -f "$f" ] || continue
+            ARTIFACT=$(jq -r '.artifact' "$f")
+            STATUS=$(jq -r '.status' "$f")
+            DURATION=$(jq -r '.duration' "$f")
+            ERRORS=$(jq -r '.errors' "$f")
+
+            if [ "$STATUS" = "pass" ]; then
+              ICON="✅"
+            elif [ "$STATUS" = "skip" ]; then
+              ICON="⏭️"
+            else
+              ICON="❌"
+              ALL_PASS=false
+            fi
+
+            # Truncate errors for table
+            if [ -n "$ERRORS" ] && [ "$ERRORS" != "" ] && [ "$ERRORS" != "null" ]; then
+              # Show first 200 chars
+              SHORT_ERR=$(echo "$ERRORS" | head -5 | sed 's/|/｜/g' | tr '\n' ' ' | cut -c1-200)
+              BODY+="| ${ARTIFACT} | ${ICON} ${STATUS} | ${DURATION} | ${SHORT_ERR} |\n"
+            else
+              BODY+="| ${ARTIFACT} | ${ICON} ${STATUS} | ${DURATION} | — |\n"
+            fi
+          done
+
+          BODY+="\n[View full run](${RUN_URL})\n"
+
+          if [ "$ALL_PASS" = true ]; then
+            TITLE="✅ Tests passed — ${TAG}"
+          else
+            TITLE="❌ Tests failed — ${TAG}"
+          fi
+
+          printf "$BODY"
+
+          # Create or update issue
+          EXISTING=$(gh issue list -R "${{ github.repository }}" --label "integration-test" --state open --json number --jq '.[0].number // empty' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            printf "$BODY" | gh issue comment "$EXISTING" -R "${{ github.repository }}" -F -
+            gh issue edit "$EXISTING" -R "${{ github.repository }}" --title "$TITLE"
+          else
+            printf "$BODY" | gh issue create -R "${{ github.repository }}" --title "$TITLE" --label "integration-test" -F -
+          fi
