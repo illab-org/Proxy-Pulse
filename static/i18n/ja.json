@@ -125,7 +125,7 @@
         "key_revoked": "APIキーが取り消されました",
         "expiry_never": "無期限",
         "expiry_expired": "期限切れ",
-        "api_key_usage": "使用方法：プロキシエンドポイントURLに ?api_key=ppk_xxx を追加するか、ヘッダー X-API-Key: ppk_xxx を設定してください",
+
         "all_proxies": "全プロキシ",
         "filter_all_protocols": "全プロトコル",
         "filter_all_status": "全ステータス",
@@ -223,6 +223,7 @@
         "checking_update": "更新を確認中...",
         "new_version_available": "新しいバージョンが利用可能",
         "update_now": "今すぐ更新",
+        "rollback": "ロールバック",
         "up_to_date": "最新バージョンを実行中です",
         "release_history": "リリース履歴",
         "current": "現在",

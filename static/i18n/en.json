@@ -125,7 +125,7 @@
         "key_revoked": "API key revoked",
         "expiry_never": "Never",
         "expiry_expired": "Expired",
-        "api_key_usage": "Usage: Add ?api_key=ppk_xxx to any proxy endpoint URL, or set header X-API-Key: ppk_xxx",
+
         "all_proxies": "All Proxies",
         "filter_all_protocols": "All Protocols",
         "filter_all_status": "All Status",
@@ -223,6 +223,7 @@
         "checking_update": "Checking for updates...",
         "new_version_available": "New version available",
         "update_now": "Update Now",
+        "rollback": "Rollback",
         "up_to_date": "You are running the latest version",
         "release_history": "Release History",
         "current": "current",

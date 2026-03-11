@@ -55,7 +55,9 @@
             padding: 24px;
             margin-bottom: 24px;
             backdrop-filter: blur(16px);
+            position: relative;
         }
+        .admin-section:has(.custom-select-dropdown.show) { z-index: 10; }
         .admin-section-header {
             display: flex;
             justify-content: space-between;

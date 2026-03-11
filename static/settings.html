@@ -17,7 +17,9 @@
             padding: 24px;
             margin-bottom: 24px;
             backdrop-filter: blur(16px);
+            position: relative;
         }
+        .admin-section:has(.custom-select-dropdown.show) { z-index: 10; }
         .admin-section-header {
             display: flex;
             justify-content: space-between;
@@ -466,11 +468,7 @@
                 </table>
             </div>
 
-            <div style="margin-top:16px;padding:12px 16px;background:rgba(255,165,2,0.06);border:1px solid rgba(255,165,2,0.15);border-radius:var(--radius-sm);">
-                <p style="font-size:0.82rem;color:var(--text-secondary);" data-i18n="admin.api_key_usage">
-                    <strong style="color:var(--accent-orange);">Usage:</strong> Add <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:4px;">?api_key=ppk_xxx</code> to any proxy endpoint URL, or set header <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:4px;">X-API-Key: ppk_xxx</code>
-                </p>
-            </div>
+
         </div>
     </main>
 
