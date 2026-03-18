@@ -21,6 +21,7 @@ pub struct Proxy {
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub source: String,
+    pub subscription_id: Option<i64>,
     pub group_name: String,
 }
 
@@ -120,6 +121,7 @@ pub struct SubscriptionSource {
     pub url: Option<String>,
     pub content: Option<String>, // raw text content for "text" type
     pub protocol_hint: String,   // "auto", "http", "socks4", "socks5"
+    pub group_name: String,
     pub is_enabled: bool,
     pub sync_interval_secs: i64,
     pub proxy_count: i64,
@@ -136,6 +138,7 @@ pub struct SubscriptionSourceResponse {
     pub source_type: String,
     pub url: Option<String>,
     pub protocol_hint: String,
+    pub group: String,
     pub is_enabled: bool,
     pub sync_interval_secs: i64,
     pub proxy_count: i64,
@@ -152,6 +155,7 @@ impl From<SubscriptionSource> for SubscriptionSourceResponse {
             source_type: s.source_type,
             url: s.url,
             protocol_hint: s.protocol_hint,
+            group: s.group_name,
             is_enabled: s.is_enabled,
             sync_interval_secs: s.sync_interval_secs,
             proxy_count: s.proxy_count,

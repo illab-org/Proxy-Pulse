@@ -12,12 +12,13 @@ impl Database {
         url: Option<&str>,
         content: Option<&str>,
         protocol_hint: &str,
+        group_name: &str,
         sync_interval_secs: i64,
     ) -> Result<i64> {
         let result = sqlx::query(
             r#"
-            INSERT INTO subscription_sources (name, source_type, url, content, protocol_hint, sync_interval_secs, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            INSERT INTO subscription_sources (name, source_type, url, content, protocol_hint, group_name, sync_interval_secs, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
             RETURNING id
             "#,
         )
@@ -26,6 +27,7 @@ impl Database {
         .bind(url)
         .bind(content)
         .bind(protocol_hint)
+        .bind(group_name)
         .bind(sync_interval_secs)
         .fetch_one(&self.pool)
         .await?;
@@ -40,7 +42,7 @@ impl Database {
     ) -> Result<Option<SubscriptionSource>> {
         let source = sqlx::query_as::<_, SubscriptionSource>(
             r#"
-            SELECT id, name, source_type, url, content, protocol_hint, is_enabled,
+                 SELECT id, name, source_type, url, content, protocol_hint, group_name, is_enabled,
                    sync_interval_secs, proxy_count, last_sync_at, last_error, created_at, updated_at
             FROM subscription_sources
             WHERE id = ?
@@ -56,7 +58,7 @@ impl Database {
     pub async fn get_all_subscription_sources(&self) -> Result<Vec<SubscriptionSource>> {
         let sources = sqlx::query_as::<_, SubscriptionSource>(
             r#"
-            SELECT id, name, source_type, url, content, protocol_hint, is_enabled,
+                 SELECT id, name, source_type, url, content, protocol_hint, group_name, is_enabled,
                    sync_interval_secs, proxy_count, last_sync_at, last_error, created_at, updated_at
             FROM subscription_sources
             ORDER BY created_at DESC
@@ -71,7 +73,7 @@ impl Database {
     pub async fn get_enabled_subscription_sources(&self) -> Result<Vec<SubscriptionSource>> {
         let sources = sqlx::query_as::<_, SubscriptionSource>(
             r#"
-            SELECT id, name, source_type, url, content, protocol_hint, is_enabled,
+                 SELECT id, name, source_type, url, content, protocol_hint, group_name, is_enabled,
                    sync_interval_secs, proxy_count, last_sync_at, last_error, created_at, updated_at
             FROM subscription_sources
             WHERE is_enabled = 1
@@ -94,7 +96,7 @@ impl Database {
     pub async fn get_sources_due_for_sync(&self) -> Result<Vec<SubscriptionSource>> {
         let sources = sqlx::query_as::<_, SubscriptionSource>(
             r#"
-            SELECT id, name, source_type, url, content, protocol_hint, is_enabled,
+                 SELECT id, name, source_type, url, content, protocol_hint, group_name, is_enabled,
                    sync_interval_secs, proxy_count, last_sync_at, last_error, created_at, updated_at
             FROM subscription_sources
             WHERE is_enabled = 1
@@ -113,6 +115,17 @@ impl Database {
             "UPDATE subscription_sources SET is_enabled = ?, updated_at = datetime('now') WHERE id = ?",
         )
         .bind(enabled)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn update_subscription_group(&self, id: i64, group_name: &str) -> Result<bool> {
+        let result = sqlx::query(
+            "UPDATE subscription_sources SET group_name = ?, updated_at = datetime('now') WHERE id = ?",
+        )
+        .bind(group_name)
         .bind(id)
         .execute(&self.pool)
         .await?;

@@ -14,16 +14,18 @@ impl Database {
         port: u16,
         protocol: &str,
         source: &str,
+        subscription_id: Option<i64>,
     ) -> Result<i64> {
         let now = Utc::now().naive_utc();
         let next_check = now;
 
         let result = sqlx::query(
             r#"
-            INSERT INTO proxies (ip, port, protocol, source, created_at, updated_at, next_check_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO proxies (ip, port, protocol, source, subscription_id, created_at, updated_at, next_check_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(ip, port, protocol) DO UPDATE SET
                 source = excluded.source,
+                subscription_id = COALESCE(excluded.subscription_id, proxies.subscription_id),
                 updated_at = excluded.updated_at
             RETURNING id
             "#,
@@ -32,6 +34,7 @@ impl Database {
         .bind(port as i32)
         .bind(protocol)
         .bind(source)
+        .bind(subscription_id)
         .bind(now)
         .bind(now)
         .bind(next_check)
@@ -49,7 +52,7 @@ impl Database {
             SELECT id, ip, port, protocol, anonymity, country, score,
                    is_alive, success_count, fail_count, consecutive_fails,
                    avg_latency_ms, last_check_at, last_success_at, next_check_at,
-                     created_at, updated_at, source, group_name
+                     created_at, updated_at, source, subscription_id, group_name
             FROM proxies
             WHERE next_check_at IS NULL OR next_check_at <= ?
             ORDER BY next_check_at ASC
@@ -192,12 +195,14 @@ impl Database {
     pub async fn get_random_alive_proxy(&self) -> Result<Option<Proxy>> {
         let proxy = sqlx::query_as::<_, Proxy>(
             r#"
-            SELECT id, ip, port, protocol, anonymity, country, score,
-                   is_alive, success_count, fail_count, consecutive_fails,
-                   avg_latency_ms, last_check_at, last_success_at, next_check_at,
-                     created_at, updated_at, source, group_name
-            FROM proxies
-            WHERE is_alive = 1 AND score >= 30
+            SELECT p.id, p.ip, p.port, p.protocol, p.anonymity, p.country, p.score,
+                   p.is_alive, p.success_count, p.fail_count, p.consecutive_fails,
+                   p.avg_latency_ms, p.last_check_at, p.last_success_at, p.next_check_at,
+                   p.created_at, p.updated_at, p.source, p.subscription_id,
+                   COALESCE(s.group_name, 'default') AS group_name
+            FROM proxies p
+            LEFT JOIN subscription_sources s ON s.id = p.subscription_id
+            WHERE p.is_alive = 1 AND p.score >= 30
             ORDER BY RANDOM()
             LIMIT 1
             "#,
@@ -209,17 +214,23 @@ impl Database {
     }
 
     pub async fn get_top_proxies(&self, limit: i64, group: Option<&str>) -> Result<Vec<Proxy>> {
-        let has_group = matches!(group, Some(g) if !g.is_empty() && g != "all");
-        let group_filter = if has_group { " AND group_name = ?" } else { "" };
+        let has_group = matches!(group, Some(g) if !g.is_empty() && !g.eq_ignore_ascii_case("all"));
+        let group_filter = if has_group {
+            " AND COALESCE(s.group_name, 'default') = ?"
+        } else {
+            ""
+        };
         let sql = format!(
             r#"
-            SELECT id, ip, port, protocol, anonymity, country, score,
-                   is_alive, success_count, fail_count, consecutive_fails,
-                   avg_latency_ms, last_check_at, last_success_at, next_check_at,
-                   created_at, updated_at, source, group_name
-            FROM proxies
-            WHERE is_alive = 1{}
-            ORDER BY score DESC
+             SELECT p.id, p.ip, p.port, p.protocol, p.anonymity, p.country, p.score,
+                 p.is_alive, p.success_count, p.fail_count, p.consecutive_fails,
+                 p.avg_latency_ms, p.last_check_at, p.last_success_at, p.next_check_at,
+                 p.created_at, p.updated_at, p.source, p.subscription_id,
+                   COALESCE(s.group_name, 'default') as group_name
+            FROM proxies p
+            LEFT JOIN subscription_sources s ON s.id = p.subscription_id
+             WHERE p.is_alive = 1{}
+             ORDER BY p.score DESC
             LIMIT ?
             "#,
             group_filter
@@ -237,7 +248,16 @@ impl Database {
 
     pub async fn get_proxy_groups(&self) -> Result<Vec<String>> {
         let rows: Vec<(String,)> = sqlx::query_as(
-            "SELECT name FROM proxy_groups ORDER BY CASE WHEN name = 'default' THEN 0 ELSE 1 END, name",
+            r#"
+            SELECT name FROM (
+                SELECT 'default' AS name
+                UNION
+                SELECT DISTINCT group_name AS name FROM subscription_sources WHERE group_name IS NOT NULL AND TRIM(group_name) <> ''
+                UNION
+                SELECT name FROM proxy_groups
+            ) g
+            ORDER BY CASE WHEN name = 'default' THEN 0 ELSE 1 END, name
+            "#,
         )
         .fetch_all(&self.pool)
         .await?;
@@ -259,7 +279,7 @@ impl Database {
             .execute(&mut *tx)
             .await?;
         sqlx::query(
-            "UPDATE proxies SET group_name = ?, updated_at = datetime('now') WHERE group_name = ?",
+            "UPDATE subscription_sources SET group_name = ?, updated_at = datetime('now') WHERE group_name = ?",
         )
         .bind(new_name)
         .bind(old_name)
@@ -275,7 +295,7 @@ impl Database {
 
     pub async fn delete_proxy_group(&self, name: &str) -> Result<()> {
         let mut tx = self.pool.begin().await?;
-        sqlx::query("UPDATE proxies SET group_name = 'default', updated_at = datetime('now') WHERE group_name = ?")
+        sqlx::query("UPDATE subscription_sources SET group_name = 'default', updated_at = datetime('now') WHERE group_name = ?")
             .bind(name)
             .execute(&mut *tx)
             .await?;
@@ -292,11 +312,21 @@ impl Database {
             .bind(group_name)
             .execute(&self.pool)
             .await?;
+
+        let source_id: Option<(i64,)> = sqlx::query_as("SELECT subscription_id FROM proxies WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        let Some((subscription_id,)) = source_id else {
+            return Ok(false);
+        };
+
         let result = sqlx::query(
-            "UPDATE proxies SET group_name = ?, updated_at = datetime('now') WHERE id = ?",
+            "UPDATE subscription_sources SET group_name = ?, updated_at = datetime('now') WHERE id = ?",
         )
         .bind(group_name)
-        .bind(id)
+        .bind(subscription_id)
         .execute(&self.pool)
         .await?;
         Ok(result.rows_affected() > 0)
@@ -305,13 +335,15 @@ impl Database {
     pub async fn get_proxies_by_country(&self, country: &str, limit: i64) -> Result<Vec<Proxy>> {
         let proxies = sqlx::query_as::<_, Proxy>(
             r#"
-            SELECT id, ip, port, protocol, anonymity, country, score,
-                   is_alive, success_count, fail_count, consecutive_fails,
-                   avg_latency_ms, last_check_at, last_success_at, next_check_at,
-                     created_at, updated_at, source, group_name
-            FROM proxies
-            WHERE is_alive = 1 AND LOWER(country) = LOWER(?)
-            ORDER BY score DESC
+            SELECT p.id, p.ip, p.port, p.protocol, p.anonymity, p.country, p.score,
+                   p.is_alive, p.success_count, p.fail_count, p.consecutive_fails,
+                   p.avg_latency_ms, p.last_check_at, p.last_success_at, p.next_check_at,
+                   p.created_at, p.updated_at, p.source, p.subscription_id,
+                   COALESCE(s.group_name, 'default') AS group_name
+            FROM proxies p
+            LEFT JOIN subscription_sources s ON s.id = p.subscription_id
+            WHERE p.is_alive = 1 AND LOWER(p.country) = LOWER(?)
+            ORDER BY p.score DESC
             LIMIT ?
             "#,
         )
@@ -327,12 +359,14 @@ impl Database {
         let offset = (page - 1) * per_page;
         let proxies = sqlx::query_as::<_, Proxy>(
             r#"
-            SELECT id, ip, port, protocol, anonymity, country, score,
-                   is_alive, success_count, fail_count, consecutive_fails,
-                   avg_latency_ms, last_check_at, last_success_at, next_check_at,
-                     created_at, updated_at, source, group_name
-            FROM proxies
-            ORDER BY score DESC
+            SELECT p.id, p.ip, p.port, p.protocol, p.anonymity, p.country, p.score,
+                   p.is_alive, p.success_count, p.fail_count, p.consecutive_fails,
+                   p.avg_latency_ms, p.last_check_at, p.last_success_at, p.next_check_at,
+                   p.created_at, p.updated_at, p.source, p.subscription_id,
+                   COALESCE(s.group_name, 'default') AS group_name
+            FROM proxies p
+            LEFT JOIN subscription_sources s ON s.id = p.subscription_id
+            ORDER BY p.score DESC
             LIMIT ? OFFSET ?
             "#,
         )
@@ -360,7 +394,7 @@ impl Database {
         };
 
         let has_country = matches!(country, Some(c) if !c.is_empty() && c != "all");
-        let country_filter = if has_country { " AND country = ?" } else { "" };
+        let country_filter = if has_country { " AND p.country = ?" } else { "" };
 
         let limit_clause = match limit {
             Some(lim) => format!(" LIMIT {}", lim),
@@ -368,12 +402,14 @@ impl Database {
         };
 
         let sql = format!(
-            r#"SELECT id, ip, port, protocol, anonymity, country, score,
-                   is_alive, success_count, fail_count, consecutive_fails,
-                   avg_latency_ms, last_check_at, last_success_at, next_check_at,
-                     created_at, updated_at, source, group_name
-            FROM proxies
-            WHERE is_alive = 1{}
+            r#"SELECT p.id, p.ip, p.port, p.protocol, p.anonymity, p.country, p.score,
+                   p.is_alive, p.success_count, p.fail_count, p.consecutive_fails,
+                   p.avg_latency_ms, p.last_check_at, p.last_success_at, p.next_check_at,
+                   p.created_at, p.updated_at, p.source, p.subscription_id,
+                   COALESCE(s.group_name, 'default') AS group_name
+            FROM proxies p
+            LEFT JOIN subscription_sources s ON s.id = p.subscription_id
+            WHERE p.is_alive = 1{}
             ORDER BY {}{}"#,
             country_filter, order_clause, limit_clause
         );
@@ -481,24 +517,24 @@ impl Database {
         let mut where_clauses = Vec::new();
         if let Some(status) = filter_status {
             match status {
-                "alive" => where_clauses.push("is_alive = 1".to_string()),
+                "alive" => where_clauses.push("p.is_alive = 1".to_string()),
                 "dead" => {
-                    where_clauses.push("is_alive = 0 AND last_check_at IS NOT NULL".to_string())
+                    where_clauses.push("p.is_alive = 0 AND p.last_check_at IS NOT NULL".to_string())
                 }
-                "untested" => where_clauses.push("last_check_at IS NULL".to_string()),
+                "untested" => where_clauses.push("p.last_check_at IS NULL".to_string()),
                 _ => {}
             }
         } else if let Some(alive) = filter_alive {
-            where_clauses.push(format!("is_alive = {}", if alive { 1 } else { 0 }));
+            where_clauses.push(format!("p.is_alive = {}", if alive { 1 } else { 0 }));
         }
         if let Some(proto) = filter_protocol {
             if !proto.is_empty() && proto != "all" {
-                where_clauses.push("protocol = ?".to_string());
+                where_clauses.push("p.protocol = ?".to_string());
             }
         }
         if let Some(group) = filter_group {
-            if !group.is_empty() && group != "all" {
-                where_clauses.push("group_name = ?".to_string());
+            if !group.is_empty() && !group.eq_ignore_ascii_case("all") {
+                where_clauses.push("COALESCE(s.group_name, 'default') = ?".to_string());
             }
         }
         let search_term = search
@@ -507,7 +543,7 @@ impl Database {
             .map(|s| format!("%{}%", s));
         if search_term.is_some() {
             where_clauses.push(
-                "(ip LIKE ? OR CAST(port AS TEXT) LIKE ? OR country LIKE ? OR source LIKE ? OR protocol LIKE ?)"
+                "(p.ip LIKE ? OR CAST(p.port AS TEXT) LIKE ? OR p.country LIKE ? OR p.source LIKE ? OR p.protocol LIKE ?)"
                     .to_string(),
             );
         }
@@ -518,7 +554,10 @@ impl Database {
             format!("WHERE {}", where_clauses.join(" AND "))
         };
 
-        let count_sql = format!("SELECT COUNT(*) FROM proxies {}", where_sql);
+        let count_sql = format!(
+            "SELECT COUNT(*) FROM proxies p LEFT JOIN subscription_sources s ON s.id = p.subscription_id {}",
+            where_sql
+        );
         let mut count_query = sqlx::query_as::<_, (i64,)>(&count_sql);
         if let Some(proto) = filter_protocol {
             if !proto.is_empty() && proto != "all" {
@@ -526,7 +565,7 @@ impl Database {
             }
         }
         if let Some(group) = filter_group {
-            if !group.is_empty() && group != "all" {
+            if !group.is_empty() && !group.eq_ignore_ascii_case("all") {
                 count_query = count_query.bind(group);
             }
         }
@@ -542,12 +581,15 @@ impl Database {
 
         let query_sql = format!(
             r#"
-            SELECT id, ip, port, protocol, anonymity, country, score,
-                   is_alive, success_count, fail_count, consecutive_fails,
-                   avg_latency_ms, last_check_at, last_success_at, next_check_at,
-                     created_at, updated_at, source, group_name
-            FROM proxies {}
-            ORDER BY updated_at DESC
+            SELECT p.id, p.ip, p.port, p.protocol, p.anonymity, p.country, p.score,
+                   p.is_alive, p.success_count, p.fail_count, p.consecutive_fails,
+                   p.avg_latency_ms, p.last_check_at, p.last_success_at, p.next_check_at,
+                   p.created_at, p.updated_at, p.source, p.subscription_id,
+                                         COALESCE(s.group_name, 'default') as group_name
+                        FROM proxies p
+                        LEFT JOIN subscription_sources s ON s.id = p.subscription_id
+                        {}
+            ORDER BY p.updated_at DESC
             LIMIT ? OFFSET ?
             "#,
             where_sql
@@ -560,7 +602,7 @@ impl Database {
             }
         }
         if let Some(group) = filter_group {
-            if !group.is_empty() && group != "all" {
+            if !group.is_empty() && !group.eq_ignore_ascii_case("all") {
                 data_query = data_query.bind(group);
             }
         }

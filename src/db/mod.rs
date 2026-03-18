@@ -60,6 +60,7 @@ impl Database {
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
                 source TEXT NOT NULL DEFAULT 'unknown',
+                subscription_id INTEGER,
                 group_name TEXT NOT NULL DEFAULT 'default',
                 UNIQUE(ip, port, protocol)
             );
@@ -67,6 +68,11 @@ impl Database {
         )
         .execute(&self.pool)
         .await?;
+
+        // Migration: add subscription_id to proxies if missing
+        let _ = sqlx::query("ALTER TABLE proxies ADD COLUMN subscription_id INTEGER")
+            .execute(&self.pool)
+            .await;
 
         // Migration: add group_name to proxies if missing
         let _ = sqlx::query(
@@ -120,6 +126,9 @@ impl Database {
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_proxies_next_check ON proxies(next_check_at);")
             .execute(&self.pool)
             .await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_proxies_subscription ON proxies(subscription_id);")
+            .execute(&self.pool)
+            .await?;
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_proxies_group ON proxies(group_name);")
             .execute(&self.pool)
             .await?;
@@ -144,6 +153,7 @@ impl Database {
                 url TEXT,
                 content TEXT,
                 protocol_hint TEXT NOT NULL DEFAULT 'auto',
+                group_name TEXT NOT NULL DEFAULT 'default',
                 is_enabled INTEGER NOT NULL DEFAULT 1,
                 sync_interval_secs INTEGER NOT NULL DEFAULT 21600,
                 proxy_count INTEGER NOT NULL DEFAULT 0,
@@ -156,6 +166,19 @@ impl Database {
         )
         .execute(&self.pool)
         .await?;
+
+        // Migration: add group_name to subscription_sources if missing
+        let _ = sqlx::query(
+            "ALTER TABLE subscription_sources ADD COLUMN group_name TEXT NOT NULL DEFAULT 'default'",
+        )
+        .execute(&self.pool)
+        .await;
+
+        let _ = sqlx::query(
+            "UPDATE subscription_sources SET group_name = 'default' WHERE group_name IS NULL OR TRIM(group_name) = ''",
+        )
+        .execute(&self.pool)
+        .await;
 
         // Migration: add sync_interval_secs column if it doesn't exist
         let _ = sqlx::query(
@@ -326,6 +349,10 @@ impl Database {
                 version: "1.1.0",
                 description: "normalize default group and enforce metadata indexes",
             },
+            DbMigration {
+                version: "1.2.0",
+                description: "add subscription group field and proxy subscription linkage",
+            },
         ];
 
         migrations.sort_by(|a, b| {
@@ -355,6 +382,7 @@ impl Database {
             match migration.version {
                 "1.0.1" => Self::migration_1_0_1(&mut tx).await?,
                 "1.1.0" => Self::migration_1_1_0(&mut tx).await?,
+                "1.2.0" => Self::migration_1_2_0(&mut tx).await?,
                 _ => unreachable!("unknown migration version"),
             }
 
@@ -407,6 +435,45 @@ impl Database {
             .await?;
 
         sqlx::query("UPDATE proxies SET group_name = 'default' WHERE group_name IS NULL OR TRIM(group_name) = ''")
+            .execute(&mut **tx)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn migration_1_2_0(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Result<()> {
+        let _ = sqlx::query(
+            "ALTER TABLE subscription_sources ADD COLUMN group_name TEXT NOT NULL DEFAULT 'default'",
+        )
+        .execute(&mut **tx)
+        .await;
+
+        sqlx::query(
+            "UPDATE subscription_sources SET group_name = 'default' WHERE group_name IS NULL OR TRIM(group_name) = ''",
+        )
+        .execute(&mut **tx)
+        .await?;
+
+        let _ = sqlx::query("ALTER TABLE proxies ADD COLUMN subscription_id INTEGER")
+            .execute(&mut **tx)
+            .await;
+
+        // Backfill linkage from legacy source tag format: sub:{id}:{name}
+        sqlx::query(
+            r#"
+            UPDATE proxies
+            SET subscription_id = CAST(
+                substr(source, 5, instr(substr(source, 5), ':') - 1) AS INTEGER
+            )
+            WHERE subscription_id IS NULL
+              AND source LIKE 'sub:%:%'
+              AND instr(substr(source, 5), ':') > 1
+            "#,
+        )
+        .execute(&mut **tx)
+        .await?;
+
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_proxies_subscription ON proxies(subscription_id)")
             .execute(&mut **tx)
             .await?;
 
@@ -604,6 +671,7 @@ impl Database {
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
                 source TEXT NOT NULL DEFAULT 'unknown',
+                subscription_id INTEGER,
                 group_name TEXT NOT NULL DEFAULT 'default',
                 UNIQUE(ip, port, protocol)
             )
@@ -616,10 +684,11 @@ impl Database {
             r#"
             INSERT INTO proxies (id, ip, port, protocol, anonymity, country, score,
                 is_alive, success_count, fail_count, consecutive_fails, avg_latency_ms,
-                last_check_at, last_success_at, next_check_at, created_at, updated_at, source, group_name)
+                last_check_at, last_success_at, next_check_at, created_at, updated_at, source, subscription_id, group_name)
             SELECT id, ip, port, protocol, anonymity, country, score,
                 is_alive, success_count, fail_count, consecutive_fails, avg_latency_ms,
                 last_check_at, last_success_at, next_check_at, created_at, updated_at, source,
+                NULL,
                 'default'
             FROM proxies_old
             "#,
@@ -641,6 +710,9 @@ impl Database {
             .execute(&mut *tx)
             .await?;
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_proxies_next_check ON proxies(next_check_at)")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_proxies_subscription ON proxies(subscription_id)")
             .execute(&mut *tx)
             .await?;
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_proxies_group ON proxies(group_name)")

@@ -1130,6 +1130,7 @@
                                 <th data-i18n="admin.th_type">Type</th>
                                 <th data-i18n="admin.th_url_content">URL / Content</th>
                                 <th data-i18n="admin.th_protocol">Protocol</th>
+                                <th>Group</th>
                                 <th data-i18n="admin.th_proxies">Proxies</th>
                                 <th data-i18n="admin.th_interval">Interval</th>
                                 <th data-i18n="admin.th_enabled">Enabled</th>
@@ -1139,7 +1140,7 @@
                             </tr>
                         </thead>
                         <tbody id="sourceTableBody">
-                            <tr><td colspan="10"><div class="loading-overlay"><span class="spinner"></span> <span data-i18n="admin.loading_sources">Loading sources...</span></div></td></tr>
+                            <tr><td colspan="11"><div class="loading-overlay"><span class="spinner"></span> <span data-i18n="admin.loading_sources">Loading sources...</span></div></td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1582,6 +1583,10 @@
                             <option value="socks4">SOCKS4</option>
                             <option value="socks5">SOCKS5</option>
                         </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Group</label>
+                        <input type="text" class="form-input" id="sourceGroup" value="default" placeholder="default">
                     </div>
                     <div class="form-group">
                         <label class="form-label" data-i18n="admin.sync_interval">Auto Sync Interval</label>
@@ -2318,7 +2323,7 @@
 
             const sources = json.data;
             if (sources.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><p>No subscription sources configured. Add one above!</p></div></td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state"><p>No subscription sources configured. Add one above!</p></div></td></tr>';
                 return;
             }
 
@@ -2329,6 +2334,10 @@
                     <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" 
                         title="${escHtml(s.url || 'Inline text content')}">${escHtml(s.url || '(inline text)')}</td>
                     <td><span class="badge badge-protocol">${s.protocol_hint.toUpperCase()}</span></td>
+                    <td>
+                        <input type="text" class="form-input" value="${escHtml(s.group || 'default')}" style="max-width:110px;height:30px;font-size:0.78rem;"
+                            onchange="updateSourceGroup(${s.id}, this.value)">
+                    </td>
                     <td style="font-weight:600;color:var(--accent-cyan);">${s.proxy_count}</td>
                     <td style="font-size:0.78rem;white-space:nowrap;">${formatInterval(s.sync_interval_secs)}</td>
                     <td>
@@ -2352,7 +2361,7 @@
             `).join('');
 
         } catch(e) {
-            tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><p style="color:var(--accent-red)">Error: ${escHtml(e.message)}</p></div></td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state"><p style="color:var(--accent-red)">Error: ${escHtml(e.message)}</p></div></td></tr>`;
         }
     }
 
@@ -2364,6 +2373,7 @@
         let url = document.getElementById('sourceUrl').value.trim();
         const content = document.getElementById('sourceContent').value.trim();
         const protocol = document.getElementById('sourceProtocol').value;
+        const group = (document.getElementById('sourceGroup').value || 'default').trim() || 'default';
         const syncInterval = parseInt(document.getElementById('sourceSyncInterval').value, 10);
 
         // Auto-convert GitHub blob URLs to raw URLs
@@ -2373,7 +2383,7 @@
             url = `https://raw.githubusercontent.com/${ghMatch[1]}/${ghMatch[2]}/${ghMatch[3]}`;
         }
 
-        const body = { name, source_type: type, protocol_hint: protocol, sync_interval_secs: syncInterval };
+        const body = { name, source_type: type, protocol_hint: protocol, group, sync_interval_secs: syncInterval };
         if (type === 'url') body.url = url;
         if (type === 'text') body.content = content;
 
@@ -2398,6 +2408,7 @@
             if (json.success) {
                 showToast(`${I18N.t('admin.toast_source_added')} — ${json.data.synced} proxies`, 'success');
                 document.getElementById('addSourceForm').reset();
+                document.getElementById('sourceGroup').value = 'default';
                 toggleSourceFields();
                 closeModal('addSourceModal');
                 loadSources();
@@ -2443,6 +2454,28 @@
                 showToast('Failed: ' + json.error, 'error');
             }
         } catch(e) { showToast('Error: ' + e.message, 'error'); }
+    }
+
+    async function updateSourceGroup(id, group) {
+        if (demoGuard()) return;
+        const g = (group || '').trim() || 'default';
+        try {
+            const resp = await authFetch(`${API}/source/${id}/group`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ group: g }),
+            });
+            const json = await resp.json();
+            if (json.success) {
+                showToast('Source group updated', 'success');
+                loadSources();
+                loadProxies();
+            } else {
+                showToast('Failed: ' + json.error, 'error');
+            }
+        } catch (e) {
+            showToast('Error: ' + e.message, 'error');
+        }
     }
 
     async function syncAllSources() {

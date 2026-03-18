@@ -68,12 +68,18 @@ pub struct AddSourceRequest {
     pub url: Option<String>,
     pub content: Option<String>,
     pub protocol_hint: Option<String>,
+    pub group: Option<String>,
     pub sync_interval_secs: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ToggleSourceRequest {
     pub enabled: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateSourceGroupRequest {
+    pub group: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -122,6 +128,10 @@ pub fn admin_api_router() -> Router<Arc<AppState>> {
         .route("/api/v1/admin/source/add", post(admin_add_source))
         .route("/api/v1/admin/source/delete/:id", post(admin_delete_source))
         .route("/api/v1/admin/source/:id/toggle", post(admin_toggle_source))
+        .route(
+            "/api/v1/admin/source/:id/group",
+            post(admin_update_source_group),
+        )
         .route("/api/v1/admin/source/sync", post(admin_sync_sources))
         .route(
             "/api/v1/admin/settings/checker",
@@ -337,8 +347,14 @@ async fn admin_import_proxies(
     let protocol_hint = body.protocol_hint.as_deref().unwrap_or("auto");
     let proxies = sources::parse_proxy_list(&body.content);
 
-    match sources::import_proxies_with_hint(&state.db, &proxies, "admin:import", protocol_hint)
-        .await
+    match sources::import_proxies_with_hint(
+        &state.db,
+        &proxies,
+        "admin:import",
+        protocol_hint,
+        None,
+    )
+    .await
     {
         Ok(count) => {
             spawn_immediate_check(state.db.clone());
@@ -426,6 +442,7 @@ async fn admin_add_source(
 ) -> Result<Json<ApiResponse<AddSourceResult>>, (StatusCode, Json<ErrorResponse>)> {
     demo_guard(&state)?;
     let protocol_hint = body.protocol_hint.as_deref().unwrap_or("auto");
+    let group_name = body.group.as_deref().unwrap_or("default");
     let sync_interval_secs = body.sync_interval_secs.unwrap_or(21600);
 
     let id = match state
@@ -436,6 +453,7 @@ async fn admin_add_source(
             body.url.as_deref(),
             body.content.as_deref(),
             protocol_hint,
+            group_name,
             sync_interval_secs,
         )
         .await
@@ -510,6 +528,49 @@ async fn admin_toggle_source(
 ) -> Result<Json<ApiResponse<bool>>, (StatusCode, Json<ErrorResponse>)> {
     demo_guard(&state)?;
     match state.db.toggle_subscription_source(id, body.enabled).await {
+        Ok(updated) => Ok(Json(ApiResponse {
+            success: true,
+            data: updated,
+        })),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                success: false,
+                error: e.to_string(),
+            }),
+        )),
+    }
+}
+
+async fn admin_update_source_group(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+    Json(body): Json<UpdateSourceGroupRequest>,
+) -> Result<Json<ApiResponse<bool>>, (StatusCode, Json<ErrorResponse>)> {
+    demo_guard(&state)?;
+    let group = body.group.trim();
+    if group.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                success: false,
+                error: "group cannot be empty".to_string(),
+            }),
+        ));
+    }
+
+    // Ensure group registry contains this group.
+    state.db.create_proxy_group(group).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                success: false,
+                error: e.to_string(),
+            }),
+        )
+    })?;
+
+    match state.db.update_subscription_group(id, group).await {
         Ok(updated) => Ok(Json(ApiResponse {
             success: true,
             data: updated,
