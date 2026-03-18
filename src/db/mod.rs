@@ -4,6 +4,7 @@ mod stats;
 mod subscription;
 
 use anyhow::Result;
+use semver::Version;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use std::str::FromStr;
 use tracing::info;
@@ -266,6 +267,148 @@ impl Database {
 
         // Migration: change UNIQUE(ip, port) → UNIQUE(ip, port, protocol)
         self.migrate_proxy_unique_constraint().await?;
+
+        // Versioned migration system (database_meta + ordered upgrades)
+        self.initialize_database_versioning("1.0.0").await?;
+        self.run_versioned_migrations().await?;
+
+        Ok(())
+    }
+
+    async fn initialize_database_versioning(&self, default_version: &str) -> Result<()> {
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS database_meta (
+                id INTEGER PRIMARY KEY CHECK(id = 1),
+                version TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO database_meta (id, version, updated_at)
+            VALUES (1, ?, datetime('now'))
+            ON CONFLICT(id) DO NOTHING
+            "#,
+        )
+        .bind(default_version)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn current_db_version(&self) -> Result<String> {
+        let row: (String,) = sqlx::query_as("SELECT version FROM database_meta WHERE id = 1")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(row.0)
+    }
+
+    async fn run_versioned_migrations(&self) -> Result<()> {
+        #[derive(Clone, Copy)]
+        struct DbMigration {
+            version: &'static str,
+            description: &'static str,
+        }
+
+        // Keep this list append-only; never reorder historical versions.
+        let mut migrations = vec![
+            DbMigration {
+                version: "1.0.1",
+                description: "create migration logs table",
+            },
+            DbMigration {
+                version: "1.1.0",
+                description: "normalize default group and enforce metadata indexes",
+            },
+        ];
+
+        migrations.sort_by(|a, b| {
+            Version::parse(a.version)
+                .expect("invalid migration semver")
+                .cmp(&Version::parse(b.version).expect("invalid migration semver"))
+        });
+
+        let current = self.current_db_version().await?;
+        let current_ver = Version::parse(&current)?;
+
+        for migration in migrations {
+            let target_ver = Version::parse(migration.version)?;
+            if target_ver <= current_ver {
+                continue;
+            }
+
+            info!(
+                from = %current,
+                to = migration.version,
+                step = migration.description,
+                "Applying database migration"
+            );
+
+            let mut tx = self.pool.begin().await?;
+
+            match migration.version {
+                "1.0.1" => Self::migration_1_0_1(&mut tx).await?,
+                "1.1.0" => Self::migration_1_1_0(&mut tx).await?,
+                _ => unreachable!("unknown migration version"),
+            }
+
+            sqlx::query("UPDATE database_meta SET version = ?, updated_at = datetime('now') WHERE id = 1")
+                .bind(migration.version)
+                .execute(&mut *tx)
+                .await?;
+
+            // Optional audit trail for applied migrations.
+            let _ = sqlx::query(
+                "INSERT INTO migration_logs (version, description, applied_at) VALUES (?, ?, datetime('now'))",
+            )
+            .bind(migration.version)
+            .bind(migration.description)
+            .execute(&mut *tx)
+            .await;
+
+            tx.commit().await?;
+
+            info!(version = migration.version, "Database migration applied");
+        }
+
+        Ok(())
+    }
+
+    async fn migration_1_0_1(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Result<()> {
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS migration_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                version TEXT NOT NULL UNIQUE,
+                description TEXT NOT NULL,
+                applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            "#,
+        )
+        .execute(&mut **tx)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn migration_1_1_0(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Result<()> {
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_proxies_group ON proxies(group_name)")
+            .execute(&mut **tx)
+            .await?;
+
+        sqlx::query("INSERT OR IGNORE INTO proxy_groups (name) VALUES ('default')")
+            .execute(&mut **tx)
+            .await?;
+
+        sqlx::query("UPDATE proxies SET group_name = 'default' WHERE group_name IS NULL OR TRIM(group_name) = ''")
+            .execute(&mut **tx)
+            .await?;
 
         Ok(())
     }

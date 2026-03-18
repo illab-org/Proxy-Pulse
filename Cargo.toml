@@ -45,6 +45,7 @@ bcrypt = "0.16"
 sha2 = "0.10"
 hex = "0.4"
 urlencoding = "2"
+semver = "1"
 axum-extra = { version = "0.9", features = ["cookie"] }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
