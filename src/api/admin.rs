@@ -21,8 +21,25 @@ pub struct AdminProxyListParams {
     pub per_page: Option<i64>,
     pub alive: Option<bool>,
     pub protocol: Option<String>,
+    pub group: Option<String>,
     pub status: Option<String>,
     pub search: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ProxyGroupRequest {
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RenameProxyGroupRequest {
+    pub old_name: String,
+    pub new_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateProxyGroupRequest {
+    pub group: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -78,6 +95,23 @@ pub struct SyncResult {
 pub fn admin_api_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/v1/admin/proxy/list", get(admin_get_proxies))
+        .route("/api/v1/admin/proxy/groups", get(admin_get_proxy_groups))
+        .route(
+            "/api/v1/admin/proxy/groups/create",
+            post(admin_create_proxy_group),
+        )
+        .route(
+            "/api/v1/admin/proxy/groups/rename",
+            post(admin_rename_proxy_group),
+        )
+        .route(
+            "/api/v1/admin/proxy/groups/delete",
+            post(admin_delete_proxy_group),
+        )
+        .route(
+            "/api/v1/admin/proxy/update-group/:id",
+            post(admin_update_proxy_group),
+        )
         .route("/api/v1/admin/proxy/import", post(admin_import_proxies))
         .route(
             "/api/v1/admin/proxy/purge-dead",
@@ -86,19 +120,25 @@ pub fn admin_api_router() -> Router<Arc<AppState>> {
         .route("/api/v1/admin/proxy/delete/:id", post(admin_delete_proxy))
         .route("/api/v1/admin/source/list", get(admin_get_sources))
         .route("/api/v1/admin/source/add", post(admin_add_source))
-        .route(
-            "/api/v1/admin/source/delete/:id",
-            post(admin_delete_source),
-        )
-        .route(
-            "/api/v1/admin/source/:id/toggle",
-            post(admin_toggle_source),
-        )
+        .route("/api/v1/admin/source/delete/:id", post(admin_delete_source))
+        .route("/api/v1/admin/source/:id/toggle", post(admin_toggle_source))
         .route("/api/v1/admin/source/sync", post(admin_sync_sources))
-        .route("/api/v1/admin/settings/checker", get(admin_get_checker_settings))
-        .route("/api/v1/admin/settings/checker", post(admin_save_checker_settings))
-        .route("/api/v1/admin/settings/system", get(admin_get_system_settings))
-        .route("/api/v1/admin/settings/system", post(admin_save_system_settings))
+        .route(
+            "/api/v1/admin/settings/checker",
+            get(admin_get_checker_settings),
+        )
+        .route(
+            "/api/v1/admin/settings/checker",
+            post(admin_save_checker_settings),
+        )
+        .route(
+            "/api/v1/admin/settings/system",
+            get(admin_get_system_settings),
+        )
+        .route(
+            "/api/v1/admin/settings/system",
+            post(admin_save_system_settings),
+        )
         .route("/api/v1/admin/db/export", get(admin_export_db))
         .route("/api/v1/admin/db/import", post(admin_import_db))
         .route("/api/v1/admin/update/check", get(admin_check_update))
@@ -120,6 +160,7 @@ async fn admin_get_proxies(
             per_page,
             params.alive,
             params.protocol.as_deref(),
+            params.group.as_deref(),
             params.status.as_deref(),
             params.search.as_deref(),
         )
@@ -138,6 +179,146 @@ async fn admin_get_proxies(
                 },
             }))
         }
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                success: false,
+                error: e.to_string(),
+            }),
+        )),
+    }
+}
+
+async fn admin_get_proxy_groups(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<Vec<String>>>, (StatusCode, Json<ErrorResponse>)> {
+    match state.db.get_proxy_groups().await {
+        Ok(groups) => Ok(Json(ApiResponse {
+            success: true,
+            data: groups,
+        })),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                success: false,
+                error: e.to_string(),
+            }),
+        )),
+    }
+}
+
+async fn admin_create_proxy_group(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<ProxyGroupRequest>,
+) -> Result<Json<ApiResponse<bool>>, (StatusCode, Json<ErrorResponse>)> {
+    demo_guard(&state)?;
+    let name = body.name.trim();
+    if name.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                success: false,
+                error: "group name cannot be empty".to_string(),
+            }),
+        ));
+    }
+    match state.db.create_proxy_group(name).await {
+        Ok(_) => Ok(Json(ApiResponse {
+            success: true,
+            data: true,
+        })),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                success: false,
+                error: e.to_string(),
+            }),
+        )),
+    }
+}
+
+async fn admin_rename_proxy_group(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<RenameProxyGroupRequest>,
+) -> Result<Json<ApiResponse<bool>>, (StatusCode, Json<ErrorResponse>)> {
+    demo_guard(&state)?;
+    let old_name = body.old_name.trim();
+    let new_name = body.new_name.trim();
+    if old_name.is_empty() || new_name.is_empty() || old_name == "default" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                success: false,
+                error: "invalid group rename request".to_string(),
+            }),
+        ));
+    }
+    match state.db.rename_proxy_group(old_name, new_name).await {
+        Ok(_) => Ok(Json(ApiResponse {
+            success: true,
+            data: true,
+        })),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                success: false,
+                error: e.to_string(),
+            }),
+        )),
+    }
+}
+
+async fn admin_delete_proxy_group(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<ProxyGroupRequest>,
+) -> Result<Json<ApiResponse<bool>>, (StatusCode, Json<ErrorResponse>)> {
+    demo_guard(&state)?;
+    let name = body.name.trim();
+    if name.is_empty() || name == "default" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                success: false,
+                error: "default group cannot be deleted".to_string(),
+            }),
+        ));
+    }
+    match state.db.delete_proxy_group(name).await {
+        Ok(_) => Ok(Json(ApiResponse {
+            success: true,
+            data: true,
+        })),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                success: false,
+                error: e.to_string(),
+            }),
+        )),
+    }
+}
+
+async fn admin_update_proxy_group(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+    Json(body): Json<UpdateProxyGroupRequest>,
+) -> Result<Json<ApiResponse<bool>>, (StatusCode, Json<ErrorResponse>)> {
+    demo_guard(&state)?;
+    let group = body.group.trim();
+    if group.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                success: false,
+                error: "group cannot be empty".to_string(),
+            }),
+        ));
+    }
+    match state.db.update_proxy_group(id, group).await {
+        Ok(updated) => Ok(Json(ApiResponse {
+            success: true,
+            data: updated,
+        })),
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
@@ -217,8 +398,7 @@ async fn admin_delete_dead_proxies(
 
 async fn admin_get_sources(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<ApiResponse<Vec<SubscriptionSourceResponse>>>, (StatusCode, Json<ErrorResponse>)>
-{
+) -> Result<Json<ApiResponse<Vec<SubscriptionSourceResponse>>>, (StatusCode, Json<ErrorResponse>)> {
     match state.db.get_all_subscription_sources().await {
         Ok(sources) => {
             let data: Vec<SubscriptionSourceResponse> = sources
@@ -274,24 +454,22 @@ async fn admin_add_source(
 
     // Immediately sync this new source
     let synced = match state.db.get_subscription_source_by_id(id).await {
-        Ok(Some(source)) => {
-            match sources::sync_single_subscription(&state.db, &source).await {
-                Ok(count) => {
-                    let _ = state
-                        .db
-                        .update_subscription_sync_result(id, count as i64, None)
-                        .await;
-                    count
-                }
-                Err(e) => {
-                    let _ = state
-                        .db
-                        .update_subscription_sync_result(id, 0, Some(&e.to_string()))
-                        .await;
-                    0
-                }
+        Ok(Some(source)) => match sources::sync_single_subscription(&state.db, &source).await {
+            Ok(count) => {
+                let _ = state
+                    .db
+                    .update_subscription_sync_result(id, count as i64, None)
+                    .await;
+                count
             }
-        }
+            Err(e) => {
+                let _ = state
+                    .db
+                    .update_subscription_sync_result(id, 0, Some(&e.to_string()))
+                    .await;
+                0
+            }
+        },
         _ => 0,
     };
 
@@ -400,35 +578,50 @@ async fn admin_save_checker_settings(
 
     // Basic validation
     if body.interval_secs < 10 || body.interval_secs > 86400 {
-        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
-            success: false,
-            error: "interval_secs must be between 10 and 86400".to_string(),
-        })));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                success: false,
+                error: "interval_secs must be between 10 and 86400".to_string(),
+            }),
+        ));
     }
     if body.timeout_secs < 1 || body.timeout_secs > 120 {
-        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
-            success: false,
-            error: "timeout_secs must be between 1 and 120".to_string(),
-        })));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                success: false,
+                error: "timeout_secs must be between 1 and 120".to_string(),
+            }),
+        ));
     }
     if body.max_concurrent < 1 || body.max_concurrent > 10000 {
-        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
-            success: false,
-            error: "max_concurrent must be between 1 and 10000".to_string(),
-        })));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                success: false,
+                error: "max_concurrent must be between 1 and 10000".to_string(),
+            }),
+        ));
     }
     if body.targets.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
-            success: false,
-            error: "At least one target URL is required".to_string(),
-        })));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                success: false,
+                error: "At least one target URL is required".to_string(),
+            }),
+        ));
     }
 
     state.db.save_checker_config(&body).await.map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
-            success: false,
-            error: e.to_string(),
-        }))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                success: false,
+                error: e.to_string(),
+            }),
+        )
     })?;
 
     Ok(Json(serde_json::json!({ "success": true })))
@@ -451,16 +644,42 @@ pub struct TriggerUpdateRequest {
 async fn admin_get_system_settings(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
-    let auto_update = state.db.get_setting("system.auto_update").await
-        .ok().flatten().map(|v| v != "false").unwrap_or(true);
-    let install_schedule = state.db.get_setting("system.install_schedule").await
-        .ok().flatten().unwrap_or_else(|| "anytime".to_string());
-    let default_language = state.db.get_setting("system.default_language").await
-        .ok().flatten().unwrap_or_else(|| "auto".to_string());
-    let default_timezone = state.db.get_setting("system.default_timezone").await
-        .ok().flatten().unwrap_or_else(|| "auto".to_string());
-    let default_theme = state.db.get_setting("system.default_theme").await
-        .ok().flatten().unwrap_or_else(|| "system".to_string());
+    let auto_update = state
+        .db
+        .get_setting("system.auto_update")
+        .await
+        .ok()
+        .flatten()
+        .map(|v| v != "false")
+        .unwrap_or(true);
+    let install_schedule = state
+        .db
+        .get_setting("system.install_schedule")
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "anytime".to_string());
+    let default_language = state
+        .db
+        .get_setting("system.default_language")
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "auto".to_string());
+    let default_timezone = state
+        .db
+        .get_setting("system.default_timezone")
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "auto".to_string());
+    let default_theme = state
+        .db
+        .get_setting("system.default_theme")
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "system".to_string());
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -481,55 +700,110 @@ async fn admin_save_system_settings(
     demo_guard(&state)?;
 
     if let Some(auto_update) = body.auto_update {
-        state.db.set_setting("system.auto_update", if auto_update { "true" } else { "false" }).await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
-                success: false, error: e.to_string(),
-            })))?;
+        state
+            .db
+            .set_setting(
+                "system.auto_update",
+                if auto_update { "true" } else { "false" },
+            )
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorResponse {
+                        success: false,
+                        error: e.to_string(),
+                    }),
+                )
+            })?;
     }
 
     if let Some(ref schedule) = body.install_schedule {
         let valid = ["anytime", "night", "morning", "afternoon", "evening"];
         if valid.contains(&schedule.as_str()) {
-            state.db.set_setting("system.install_schedule", schedule).await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
-                    success: false, error: e.to_string(),
-                })))?;
+            state
+                .db
+                .set_setting("system.install_schedule", schedule)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ErrorResponse {
+                            success: false,
+                            error: e.to_string(),
+                        }),
+                    )
+                })?;
         }
     }
 
     if let Some(ref lang) = body.default_language {
         let valid = ["auto", "en", "zh-CN", "zh-TW", "ja"];
         if !valid.contains(&lang.as_str()) {
-            return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
-                success: false,
-                error: "Invalid language. Must be one of: auto, en, zh-CN, zh-TW, ja".to_string(),
-            })));
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    success: false,
+                    error: "Invalid language. Must be one of: auto, en, zh-CN, zh-TW, ja"
+                        .to_string(),
+                }),
+            ));
         }
-        state.db.set_setting("system.default_language", lang).await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
-                success: false, error: e.to_string(),
-            })))?;
+        state
+            .db
+            .set_setting("system.default_language", lang)
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorResponse {
+                        success: false,
+                        error: e.to_string(),
+                    }),
+                )
+            })?;
     }
 
     if let Some(ref tz) = body.default_timezone {
-        state.db.set_setting("system.default_timezone", tz).await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
-                success: false, error: e.to_string(),
-            })))?;
+        state
+            .db
+            .set_setting("system.default_timezone", tz)
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorResponse {
+                        success: false,
+                        error: e.to_string(),
+                    }),
+                )
+            })?;
     }
 
     if let Some(ref theme) = body.default_theme {
         let valid = ["system", "light", "dark"];
         if !valid.contains(&theme.as_str()) {
-            return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
-                success: false,
-                error: "Invalid theme. Must be one of: system, light, dark".to_string(),
-            })));
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    success: false,
+                    error: "Invalid theme. Must be one of: system, light, dark".to_string(),
+                }),
+            ));
         }
-        state.db.set_setting("system.default_theme", theme).await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
-                success: false, error: e.to_string(),
-            })))?;
+        state
+            .db
+            .set_setting("system.default_theme", theme)
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorResponse {
+                        success: false,
+                        error: e.to_string(),
+                    }),
+                )
+            })?;
     }
 
     Ok(Json(serde_json::json!({ "success": true })))
@@ -542,20 +816,33 @@ async fn admin_export_db(
     sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
         .execute(&state.db.pool)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
-            success: false, error: e.to_string(),
-        })))?;
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    success: false,
+                    error: e.to_string(),
+                }),
+            )
+        })?;
 
     let data = tokio::fs::read(&state.db_path).await.map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
-            success: false, error: format!("Failed to read database file: {}", e),
-        }))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                success: false,
+                error: format!("Failed to read database file: {}", e),
+            }),
+        )
     })?;
 
     Ok(Response::builder()
         .status(200)
         .header("Content-Type", "application/x-sqlite3")
-        .header("Content-Disposition", "attachment; filename=\"proxy_pulse.db\"")
+        .header(
+            "Content-Disposition",
+            "attachment; filename=\"proxy_pulse.db\"",
+        )
         .body(Body::from(data))
         .unwrap())
 }
@@ -566,36 +853,59 @@ async fn admin_import_db(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
     demo_guard(&state)?;
 
-    let field = multipart.next_field().await.map_err(|e| {
-        (StatusCode::BAD_REQUEST, Json(ErrorResponse {
-            success: false, error: format!("Invalid upload: {}", e),
-        }))
-    })?.ok_or_else(|| {
-        (StatusCode::BAD_REQUEST, Json(ErrorResponse {
-            success: false, error: "No file uploaded".to_string(),
-        }))
-    })?;
+    let field = multipart
+        .next_field()
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    success: false,
+                    error: format!("Invalid upload: {}", e),
+                }),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    success: false,
+                    error: "No file uploaded".to_string(),
+                }),
+            )
+        })?;
 
     let data = field.bytes().await.map_err(|e| {
-        (StatusCode::BAD_REQUEST, Json(ErrorResponse {
-            success: false, error: format!("Failed to read upload: {}", e),
-        }))
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                success: false,
+                error: format!("Failed to read upload: {}", e),
+            }),
+        )
     })?;
 
     // Validate it's a SQLite file (magic header)
     if data.len() < 16 || &data[..16] != b"SQLite format 3\0" {
-        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
-            success: false,
-            error: "Invalid SQLite database file".to_string(),
-        })));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                success: false,
+                error: "Invalid SQLite database file".to_string(),
+            }),
+        ));
     }
 
     // Write to a temporary file next to the DB, then rename atomically
     let import_path = format!("{}.import", state.db_path);
     tokio::fs::write(&import_path, &data).await.map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
-            success: false, error: format!("Failed to write file: {}", e),
-        }))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                success: false,
+                error: format!("Failed to write file: {}", e),
+            }),
+        )
     })?;
 
     // Close all pool connections
@@ -603,9 +913,13 @@ async fn admin_import_db(
 
     // Replace the database file
     if let Err(e) = tokio::fs::rename(&import_path, &state.db_path).await {
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
-            success: false, error: format!("Failed to replace database: {}", e),
-        })));
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                success: false,
+                error: format!("Failed to replace database: {}", e),
+            }),
+        ));
     }
 
     // Remove WAL and SHM files if they exist

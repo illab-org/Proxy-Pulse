@@ -6,8 +6,8 @@ pub struct Proxy {
     pub id: i64,
     pub ip: String,
     pub port: u16,
-    pub protocol: String,        // http, https, socks4, socks5
-    pub anonymity: String,       // transparent, anonymous, elite
+    pub protocol: String,  // http, https, socks4, socks5
+    pub anonymity: String, // transparent, anonymous, elite
     pub country: String,
     pub score: f64,
     pub is_alive: bool,
@@ -21,6 +21,7 @@ pub struct Proxy {
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub source: String,
+    pub group_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,6 +36,7 @@ pub struct ProxyResponse {
     pub success_count: i64,
     pub fail_count: i64,
     pub success_rate: f64,
+    pub group: String,
 }
 
 impl From<Proxy> for ProxyResponse {
@@ -56,6 +58,7 @@ impl From<Proxy> for ProxyResponse {
             success_count: p.success_count,
             fail_count: p.fail_count,
             success_rate,
+            group: p.group_name,
         }
     }
 }
@@ -113,10 +116,10 @@ pub struct CheckLog {
 pub struct SubscriptionSource {
     pub id: i64,
     pub name: String,
-    pub source_type: String,        // "url" or "text"
+    pub source_type: String, // "url" or "text"
     pub url: Option<String>,
-    pub content: Option<String>,     // raw text content for "text" type
-    pub protocol_hint: String,       // "auto", "http", "socks4", "socks5"
+    pub content: Option<String>, // raw text content for "text" type
+    pub protocol_hint: String,   // "auto", "http", "socks4", "socks5"
     pub is_enabled: bool,
     pub sync_interval_secs: i64,
     pub proxy_count: i64,
@@ -152,7 +155,9 @@ impl From<SubscriptionSource> for SubscriptionSourceResponse {
             is_enabled: s.is_enabled,
             sync_interval_secs: s.sync_interval_secs,
             proxy_count: s.proxy_count,
-            last_sync_at: s.last_sync_at.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()),
+            last_sync_at: s
+                .last_sync_at
+                .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()),
             last_error: s.last_error,
             created_at: s.created_at.format("%Y-%m-%d %H:%M:%S").to_string(),
         }
@@ -174,6 +179,7 @@ pub struct ProxyAdminResponse {
     pub fail_count: i64,
     pub consecutive_fails: i64,
     pub source: String,
+    pub group: String,
     pub last_check_at: Option<String>,
     pub last_success_at: Option<String>,
     pub next_check_at: Option<String>,
@@ -195,9 +201,16 @@ impl From<Proxy> for ProxyAdminResponse {
             fail_count: p.fail_count,
             consecutive_fails: p.consecutive_fails,
             source: p.source,
-            last_check_at: p.last_check_at.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()),
-            last_success_at: p.last_success_at.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()),
-            next_check_at: p.next_check_at.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()),
+            group: p.group_name,
+            last_check_at: p
+                .last_check_at
+                .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()),
+            last_success_at: p
+                .last_success_at
+                .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()),
+            next_check_at: p
+                .next_check_at
+                .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()),
             created_at: p.created_at.format("%Y-%m-%d %H:%M:%S").to_string(),
         }
     }

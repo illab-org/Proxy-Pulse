@@ -1,10 +1,10 @@
 use anyhow::Result;
 use chrono::{Duration, Utc};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Semaphore;
 use tracing::{debug, info, warn};
-use std::sync::Arc;
 
 use crate::config::CheckerConfig;
 use crate::db::Database;
@@ -28,12 +28,12 @@ fn direct_client() -> &'static reqwest::Client {
 }
 
 /// Run a check cycle: fetch due proxies and check them
-pub async fn run_check_cycle(
-    db: &Database,
-    checker_cfg: &CheckerConfig,
-) -> Result<(usize, usize)> {
+pub async fn run_check_cycle(db: &Database, checker_cfg: &CheckerConfig) -> Result<(usize, usize)> {
     // Prevent concurrent check cycles from overlapping
-    if CHECK_RUNNING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+    if CHECK_RUNNING
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
         info!("Check cycle already running, skipping");
         return Ok((0, 0));
     }
@@ -231,15 +231,15 @@ fn calculate_next_check(proxy: &Proxy, success: bool) -> chrono::NaiveDateTime {
     } else {
         let consecutive = proxy.consecutive_fails + 1; // +1 for this failure
         let minutes = match consecutive {
-            1 => 3,         // 1st failure: 3 minutes
-            2 => 10,        // 2nd failure: 10 minutes
-            3 => 30,        // 3rd failure: 30 minutes
-            4 => 60,        // 4th failure: 1 hour
-            5 => 180,       // 5th failure: 3 hours
-            6 => 360,       // 6th failure: 6 hours
-            7 => 720,       // 7th failure: 12 hours
-            8 => 1440,      // 8th failure: 24 hours
-            _ => 2880,      // 9th+: 48 hours (max)
+            1 => 3,    // 1st failure: 3 minutes
+            2 => 10,   // 2nd failure: 10 minutes
+            3 => 30,   // 3rd failure: 30 minutes
+            4 => 60,   // 4th failure: 1 hour
+            5 => 180,  // 5th failure: 3 hours
+            6 => 360,  // 6th failure: 6 hours
+            7 => 720,  // 7th failure: 12 hours
+            8 => 1440, // 8th failure: 24 hours
+            _ => 2880, // 9th+: 48 hours (max)
         };
         now + Duration::minutes(minutes)
     }
@@ -251,11 +251,7 @@ fn calculate_next_check(proxy: &Proxy, success: bool) -> chrono::NaiveDateTime {
 ///   Country:         6 pts  (tier-based ranking)
 ///   Proxy type:      4 pts  (more secure = higher)
 ///   Latency:        20 pts  (≤100ms=20, ≥5000ms=0, linear)
-fn calculate_score(
-    proxy: &Proxy,
-    current_success: bool,
-    avg_latency: Option<f64>,
-) -> f64 {
+fn calculate_score(proxy: &Proxy, current_success: bool, avg_latency: Option<f64>) -> f64 {
     let total_checks = proxy.success_count + proxy.fail_count + 1;
     let successes = proxy.success_count + if current_success { 1 } else { 0 };
 
@@ -271,11 +267,11 @@ fn calculate_score(
 
     // Proxy type component (0-4): more secure = higher
     let type_score = match proxy.protocol.as_str() {
-        "socks5" => 4.0,  // most versatile & secure
-        "https"  => 3.0,
+        "socks5" => 4.0, // most versatile & secure
+        "https" => 3.0,
         "socks4" => 2.0,
-        "http"   => 1.0,
-        _        => 0.0,
+        "http" => 1.0,
+        _ => 0.0,
     };
 
     // Latency component (0-20): ≤100ms = 20, ≥5000ms = 0, linear between
@@ -292,7 +288,8 @@ fn calculate_score(
         _ => 0.0,
     };
 
-    let score = success_rate_score + success_count_score + country_score + type_score + latency_score;
+    let score =
+        success_rate_score + success_count_score + country_score + type_score + latency_score;
     score.clamp(0.0, 100.0)
 }
 
@@ -302,25 +299,42 @@ fn country_tier_score(country: &str) -> f64 {
         return 0.0;
     }
     // Tier 1 (6 pts): major datacenter / premium regions
-    const TIER1: &[&str] = &["US", "GB", "DE", "JP", "SG", "NL", "CA", "AU", "FR", "SE", "CH", "IE", "FI", "NO", "DK"];
+    const TIER1: &[&str] = &[
+        "US", "GB", "DE", "JP", "SG", "NL", "CA", "AU", "FR", "SE", "CH", "IE", "FI", "NO", "DK",
+    ];
     // Tier 2 (4.5 pts): solid infrastructure countries
-    const TIER2: &[&str] = &["KR", "TW", "HK", "IT", "ES", "BR", "IN", "PL", "CZ", "RO", "AT", "BE", "NZ", "IL", "ZA"];
+    const TIER2: &[&str] = &[
+        "KR", "TW", "HK", "IT", "ES", "BR", "IN", "PL", "CZ", "RO", "AT", "BE", "NZ", "IL", "ZA",
+    ];
     // Tier 3 (3 pts): decent regions
-    const TIER3: &[&str] = &["RU", "UA", "TR", "MX", "AR", "CL", "CO", "TH", "VN", "ID", "PH", "MY", "PT", "GR", "HU", "BG"];
+    const TIER3: &[&str] = &[
+        "RU", "UA", "TR", "MX", "AR", "CL", "CO", "TH", "VN", "ID", "PH", "MY", "PT", "GR", "HU",
+        "BG",
+    ];
     let code = country.to_uppercase();
     let c = code.as_str();
-    if TIER1.contains(&c) { 6.0 }
-    else if TIER2.contains(&c) { 4.5 }
-    else if TIER3.contains(&c) { 3.0 }
-    else { 1.5 } // known but unlisted country
+    if TIER1.contains(&c) {
+        6.0
+    } else if TIER2.contains(&c) {
+        4.5
+    } else if TIER3.contains(&c) {
+        3.0
+    } else {
+        1.5
+    } // known but unlisted country
 }
 
 /// Try to detect proxy metadata (anonymity, protocol detection)
 /// Only runs for proxies that still have unknown metadata to avoid redundant work.
-async fn detect_and_update_metadata(db: &Database, proxy: &Proxy, client: &reqwest::Client) -> Result<()> {
+async fn detect_and_update_metadata(
+    db: &Database,
+    proxy: &Proxy,
+    client: &reqwest::Client,
+) -> Result<()> {
     // Skip anonymity redetection if already known
     let anonymity = if proxy.anonymity == "unknown" {
-        detect_anonymity(client).await
+        detect_anonymity(client)
+            .await
             .unwrap_or_else(|_| "unknown".to_string())
     } else {
         proxy.anonymity.clone()
@@ -331,7 +345,8 @@ async fn detect_and_update_metadata(db: &Database, proxy: &Proxy, client: &reqwe
 
     // Country detection — only if unknown
     let country = if proxy.country == "unknown" {
-        detect_country_by_ip(&proxy.ip).await
+        detect_country_by_ip(&proxy.ip)
+            .await
             .unwrap_or_else(|_| "unknown".to_string())
     } else {
         proxy.country.clone()
@@ -347,10 +362,7 @@ async fn detect_and_update_metadata(db: &Database, proxy: &Proxy, client: &reqwe
 }
 
 async fn detect_anonymity(client: &reqwest::Client) -> Result<String> {
-    let resp = client
-        .get("https://httpbin.org/headers")
-        .send()
-        .await?;
+    let resp = client.get("https://httpbin.org/headers").send().await?;
 
     // Limit body read to prevent memory bloat from unexpected large responses
     let bytes = resp.bytes().await?;
@@ -376,15 +388,16 @@ async fn detect_anonymity(client: &reqwest::Client) -> Result<String> {
     }
 }
 
-
-
 /// Detect country from the proxy's IP address using free GeoIP APIs (direct, not through proxy)
 async fn detect_country_by_ip(ip: &str) -> Result<String> {
     let client = direct_client();
 
     // Try ip-api.com first (free, no key required, 45 req/min)
     if let Ok(resp) = client
-        .get(&format!("http://ip-api.com/json/{}?fields=status,countryCode", ip))
+        .get(&format!(
+            "http://ip-api.com/json/{}?fields=status,countryCode",
+            ip
+        ))
         .send()
         .await
     {
@@ -415,11 +428,7 @@ async fn detect_country_by_ip(ip: &str) -> Result<String> {
     }
 
     // Fallback: ipwho.is (free, unlimited)
-    if let Ok(resp) = client
-        .get(&format!("https://ipwho.is/{}", ip))
-        .send()
-        .await
-    {
+    if let Ok(resp) = client.get(&format!("https://ipwho.is/{}", ip)).send().await {
         if let Ok(json) = resp.json::<serde_json::Value>().await {
             if json.get("success").and_then(|s| s.as_bool()) == Some(true) {
                 if let Some(cc) = json.get("country_code").and_then(|c| c.as_str()) {

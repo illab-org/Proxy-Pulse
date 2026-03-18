@@ -19,24 +19,37 @@ impl Database {
         password_hash: &str,
         role: &str,
     ) -> Result<i64> {
-        let result = sqlx::query(
-            "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
-        )
-        .bind(username)
-        .bind(password_hash)
-        .bind(role)
-        .execute(&self.pool)
-        .await?;
+        let result =
+            sqlx::query("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)")
+                .bind(username)
+                .bind(password_hash)
+                .bind(role)
+                .execute(&self.pool)
+                .await?;
         let user_id = result.last_insert_rowid();
 
         // Apply system default preferences for new user
-        let theme = self.get_setting("system.default_theme").await
-            .ok().flatten().unwrap_or_else(|| "system".to_string());
-        let language = self.get_setting("system.default_language").await
-            .ok().flatten().unwrap_or_else(|| "en".to_string());
-        let timezone = self.get_setting("system.default_timezone").await
-            .ok().flatten().unwrap_or_else(|| "auto".to_string());
-        let _ = self.save_user_preferences(user_id, &theme, &language, &timezone).await;
+        let theme = self
+            .get_setting("system.default_theme")
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "system".to_string());
+        let language = self
+            .get_setting("system.default_language")
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "en".to_string());
+        let timezone = self
+            .get_setting("system.default_timezone")
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "auto".to_string());
+        let _ = self
+            .save_user_preferences(user_id, &theme, &language, &timezone)
+            .await;
 
         Ok(user_id)
     }
@@ -60,7 +73,12 @@ impl Database {
         Ok(())
     }
 
-    pub async fn update_user(&self, user_id: i64, role: Option<&str>, password_hash: Option<&str>) -> Result<bool> {
+    pub async fn update_user(
+        &self,
+        user_id: i64,
+        role: Option<&str>,
+        password_hash: Option<&str>,
+    ) -> Result<bool> {
         if let Some(r) = role {
             sqlx::query("UPDATE users SET role = ? WHERE id = ?")
                 .bind(r)
@@ -79,22 +97,19 @@ impl Database {
     }
 
     pub async fn get_user_password_hash(&self, user_id: i64) -> Result<Option<String>> {
-        let row = sqlx::query_as::<_, (String,)>(
-            "SELECT password_hash FROM users WHERE id = ?",
-        )
-        .bind(user_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let row = sqlx::query_as::<_, (String,)>("SELECT password_hash FROM users WHERE id = ?")
+            .bind(user_id)
+            .fetch_optional(&self.pool)
+            .await?;
         Ok(row.map(|r| r.0))
     }
 
     pub async fn get_user_info(&self, user_id: i64) -> Result<Option<(String, String)>> {
-        let row = sqlx::query_as::<_, (String, String)>(
-            "SELECT username, role FROM users WHERE id = ?",
-        )
-        .bind(user_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let row =
+            sqlx::query_as::<_, (String, String)>("SELECT username, role FROM users WHERE id = ?")
+                .bind(user_id)
+                .fetch_optional(&self.pool)
+                .await?;
         Ok(row)
     }
 
@@ -124,10 +139,9 @@ impl Database {
     }
 
     pub async fn count_admins(&self) -> Result<i64> {
-        let row: (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM users WHERE role = 'admin'")
-                .fetch_one(&self.pool)
-                .await?;
+        let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users WHERE role = 'admin'")
+            .fetch_one(&self.pool)
+            .await?;
         Ok(row.0)
     }
 
@@ -160,11 +174,7 @@ impl Database {
         Ok(row.map(|r| r.0))
     }
 
-    pub async fn refresh_session(
-        &self,
-        token: &str,
-        new_expires: NaiveDateTime,
-    ) -> Result<()> {
+    pub async fn refresh_session(&self, token: &str, new_expires: NaiveDateTime) -> Result<()> {
         sqlx::query("UPDATE sessions SET expires_at = ? WHERE token = ?")
             .bind(new_expires)
             .bind(token)

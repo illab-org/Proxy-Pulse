@@ -139,7 +139,10 @@ pub async fn save_preferences(
     // Validate timezone: must be "auto" or a valid IANA timezone name (basic format check)
     if body.timezone != "auto"
         && (body.timezone.len() > 50
-            || !body.timezone.chars().all(|c| c.is_ascii_alphanumeric() || c == '/' || c == '_' || c == '-' || c == '+'))
+            || !body
+                .timezone
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '/' || c == '_' || c == '-' || c == '+'))
     {
         return Err(err("Invalid timezone value"));
     }
@@ -331,11 +334,18 @@ pub async fn update_user_handler(
         }
         // Prevent demoting the last admin
         if role == "user" {
-            let current_role = state.db.get_user_role(id).await
+            let current_role = state
+                .db
+                .get_user_role(id)
+                .await
                 .map_err(|_| err("User not found"))?
                 .ok_or_else(|| err("User not found"))?;
             if current_role == "admin" {
-                let admin_count = state.db.count_admins().await.map_err(|_| err("Database error"))?;
+                let admin_count = state
+                    .db
+                    .count_admins()
+                    .await
+                    .map_err(|_| err("Database error"))?;
                 if admin_count <= 1 {
                     return Err(err("Cannot demote the last admin user"));
                 }

@@ -20,6 +20,7 @@ pub struct PaginationParams {
 #[derive(Debug, Deserialize)]
 pub struct TopParams {
     pub limit: Option<i64>,
+    pub group: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -39,7 +40,11 @@ pub fn proxy_api_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/v1/proxy/random", get(get_random_proxy))
         .route("/api/v1/proxy/top", get(get_top_proxies))
-        .route("/api/v1/proxy/country/:country", get(get_proxies_by_country))
+        .route("/api/v1/proxy/groups", get(get_proxy_groups))
+        .route(
+            "/api/v1/proxy/country/:country",
+            get(get_proxies_by_country),
+        )
         .route("/api/v1/proxy/all", get(get_all_proxies))
         .route("/api/v1/proxy/json", get(get_proxies_json))
         .route("/api/v1/proxy/txt", get(get_proxies_txt))
@@ -73,8 +78,9 @@ async fn get_top_proxies(
     Query(params): Query<TopParams>,
 ) -> Result<Json<ApiResponse<ProxyListResponse>>, (StatusCode, Json<ErrorResponse>)> {
     let limit = params.limit.unwrap_or(10).min(100);
+    let group = params.group.as_deref();
 
-    match state.db.get_top_proxies(limit).await {
+    match state.db.get_top_proxies(limit, group).await {
         Ok(proxies) => {
             let count = proxies.len();
             let proxies: Vec<ProxyResponse> =
@@ -84,6 +90,24 @@ async fn get_top_proxies(
                 data: ProxyListResponse { proxies, count },
             }))
         }
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                success: false,
+                error: e.to_string(),
+            }),
+        )),
+    }
+}
+
+async fn get_proxy_groups(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<Vec<String>>>, (StatusCode, Json<ErrorResponse>)> {
+    match state.db.get_proxy_groups().await {
+        Ok(groups) => Ok(Json(ApiResponse {
+            success: true,
+            data: groups,
+        })),
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {

@@ -59,12 +59,36 @@ impl Database {
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
                 source TEXT NOT NULL DEFAULT 'unknown',
+                group_name TEXT NOT NULL DEFAULT 'default',
                 UNIQUE(ip, port, protocol)
             );
             "#,
         )
         .execute(&self.pool)
         .await?;
+
+        // Migration: add group_name to proxies if missing
+        let _ = sqlx::query(
+            "ALTER TABLE proxies ADD COLUMN group_name TEXT NOT NULL DEFAULT 'default'",
+        )
+        .execute(&self.pool)
+        .await;
+
+        // Group registry table for admin management
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS proxy_groups (
+                name TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query("INSERT OR IGNORE INTO proxy_groups (name) VALUES ('default')")
+            .execute(&self.pool)
+            .await?;
 
         sqlx::query(
             r#"
@@ -93,6 +117,9 @@ impl Database {
             .execute(&self.pool)
             .await?;
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_proxies_next_check ON proxies(next_check_at);")
+            .execute(&self.pool)
+            .await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_proxies_group ON proxies(group_name);")
             .execute(&self.pool)
             .await?;
         sqlx::query(
@@ -216,9 +243,11 @@ impl Database {
         .await?;
 
         // Migration: add timezone column to user_preferences if missing
-        let _ = sqlx::query("ALTER TABLE user_preferences ADD COLUMN timezone TEXT NOT NULL DEFAULT 'auto'")
-            .execute(&self.pool)
-            .await;
+        let _ = sqlx::query(
+            "ALTER TABLE user_preferences ADD COLUMN timezone TEXT NOT NULL DEFAULT 'auto'",
+        )
+        .execute(&self.pool)
+        .await;
 
         // System settings table (key-value store for checker config etc.)
         sqlx::query(
@@ -244,12 +273,11 @@ impl Database {
     // ── System Settings ──
 
     pub async fn get_setting(&self, key: &str) -> Result<Option<String>> {
-        let row: Option<(String,)> = sqlx::query_as(
-            "SELECT value FROM system_settings WHERE key = ?",
-        )
-        .bind(key)
-        .fetch_optional(&self.pool)
-        .await?;
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT value FROM system_settings WHERE key = ?")
+                .bind(key)
+                .fetch_optional(&self.pool)
+                .await?;
         Ok(row.map(|r| r.0))
     }
 
@@ -265,27 +293,56 @@ impl Database {
     }
 
     pub async fn get_checker_config(&self) -> CheckerConfig {
-        let interval = self.get_setting("checker.interval_secs").await
-            .ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(60);
-        let timeout = self.get_setting("checker.timeout_secs").await
-            .ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(10);
-        let max_concurrent = self.get_setting("checker.max_concurrent").await
-            .ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(200);
-        let targets = self.get_setting("checker.targets").await
-            .ok().flatten()
+        let interval = self
+            .get_setting("checker.interval_secs")
+            .await
+            .ok()
+            .flatten()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(60);
+        let timeout = self
+            .get_setting("checker.timeout_secs")
+            .await
+            .ok()
+            .flatten()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(10);
+        let max_concurrent = self
+            .get_setting("checker.max_concurrent")
+            .await
+            .ok()
+            .flatten()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(200);
+        let targets = self
+            .get_setting("checker.targets")
+            .await
+            .ok()
+            .flatten()
             .map(|v| serde_json::from_str(&v).unwrap_or_default())
-            .unwrap_or_else(|| vec![
-                "https://httpbin.org/ip".to_string(),
-                "https://www.cloudflare.com/cdn-cgi/trace".to_string(),
-            ]);
-        CheckerConfig { interval_secs: interval, timeout_secs: timeout, max_concurrent, targets }
+            .unwrap_or_else(|| {
+                vec![
+                    "https://httpbin.org/ip".to_string(),
+                    "https://www.cloudflare.com/cdn-cgi/trace".to_string(),
+                ]
+            });
+        CheckerConfig {
+            interval_secs: interval,
+            timeout_secs: timeout,
+            max_concurrent,
+            targets,
+        }
     }
 
     pub async fn save_checker_config(&self, cfg: &CheckerConfig) -> Result<()> {
-        self.set_setting("checker.interval_secs", &cfg.interval_secs.to_string()).await?;
-        self.set_setting("checker.timeout_secs", &cfg.timeout_secs.to_string()).await?;
-        self.set_setting("checker.max_concurrent", &cfg.max_concurrent.to_string()).await?;
-        self.set_setting("checker.targets", &serde_json::to_string(&cfg.targets)?).await?;
+        self.set_setting("checker.interval_secs", &cfg.interval_secs.to_string())
+            .await?;
+        self.set_setting("checker.timeout_secs", &cfg.timeout_secs.to_string())
+            .await?;
+        self.set_setting("checker.max_concurrent", &cfg.max_concurrent.to_string())
+            .await?;
+        self.set_setting("checker.targets", &serde_json::to_string(&cfg.targets)?)
+            .await?;
         Ok(())
     }
 
@@ -359,11 +416,10 @@ impl Database {
 
     /// Migrate proxies table: UNIQUE(ip, port) → UNIQUE(ip, port, protocol).
     async fn migrate_proxy_unique_constraint(&self) -> Result<()> {
-        let row: Option<(String,)> = sqlx::query_as(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='proxies'",
-        )
-        .fetch_optional(&self.pool)
-        .await?;
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT sql FROM sqlite_master WHERE type='table' AND name='proxies'")
+                .fetch_optional(&self.pool)
+                .await?;
 
         let Some((sql,)) = row else { return Ok(()) };
 
@@ -405,6 +461,7 @@ impl Database {
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
                 source TEXT NOT NULL DEFAULT 'unknown',
+                group_name TEXT NOT NULL DEFAULT 'default',
                 UNIQUE(ip, port, protocol)
             )
             "#,
@@ -416,10 +473,11 @@ impl Database {
             r#"
             INSERT INTO proxies (id, ip, port, protocol, anonymity, country, score,
                 is_alive, success_count, fail_count, consecutive_fails, avg_latency_ms,
-                last_check_at, last_success_at, next_check_at, created_at, updated_at, source)
+                last_check_at, last_success_at, next_check_at, created_at, updated_at, source, group_name)
             SELECT id, ip, port, protocol, anonymity, country, score,
                 is_alive, success_count, fail_count, consecutive_fails, avg_latency_ms,
-                last_check_at, last_success_at, next_check_at, created_at, updated_at, source
+                last_check_at, last_success_at, next_check_at, created_at, updated_at, source,
+                'default'
             FROM proxies_old
             "#,
         )
@@ -442,13 +500,18 @@ impl Database {
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_proxies_next_check ON proxies(next_check_at)")
             .execute(&mut *tx)
             .await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_proxies_group ON proxies(group_name)")
+            .execute(&mut *tx)
+            .await?;
 
         sqlx::query("PRAGMA legacy_alter_table=OFF")
             .execute(&mut *tx)
             .await?;
 
         tx.commit().await?;
-        info!("Migration complete: proxies table now supports same IP:port with different protocols");
+        info!(
+            "Migration complete: proxies table now supports same IP:port with different protocols"
+        );
 
         Ok(())
     }

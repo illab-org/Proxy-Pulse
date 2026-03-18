@@ -1,8 +1,8 @@
 use tokio::time::{interval, Duration};
 use tracing::{error, info};
 
-use crate::db::Database;
 use crate::checker;
+use crate::db::Database;
 
 /// Start all background scheduler tasks
 pub async fn start_schedulers(db: Database) {
@@ -21,7 +21,9 @@ pub async fn start_schedulers(db: Database) {
                     tokio::spawn(async move {
                         let cfg = db2.get_checker_config().await;
                         match checker::run_check_cycle(&db2, &cfg).await {
-                            Ok((s, f)) => info!(success = s, fail = f, "Post-sync check cycle complete"),
+                            Ok((s, f)) => {
+                                info!(success = s, fail = f, "Post-sync check cycle complete")
+                            }
                             Err(e) => error!(error = %e, "Post-sync check cycle failed"),
                         }
                     });
@@ -40,14 +42,17 @@ pub async fn start_schedulers(db: Database) {
             // Get sources that are due for sync based on their individual intervals
             match db_source.get_sources_due_for_sync().await {
                 Ok(due_sources) if !due_sources.is_empty() => {
-                    info!(count = due_sources.len(), "Subscription sources due for auto-sync");
+                    info!(
+                        count = due_sources.len(),
+                        "Subscription sources due for auto-sync"
+                    );
                     let mut synced_total = 0usize;
                     for source in &due_sources {
                         match crate::sources::sync_single_subscription(&db_source, source).await {
                             Ok(count) => {
-                                let _ = db_source.update_subscription_sync_result(
-                                    source.id, count as i64, None,
-                                ).await;
+                                let _ = db_source
+                                    .update_subscription_sync_result(source.id, count as i64, None)
+                                    .await;
                                 info!(
                                     source_id = source.id,
                                     name = %source.name,
@@ -58,9 +63,13 @@ pub async fn start_schedulers(db: Database) {
                                 synced_total += count;
                             }
                             Err(e) => {
-                                let _ = db_source.update_subscription_sync_result(
-                                    source.id, 0, Some(&e.to_string()),
-                                ).await;
+                                let _ = db_source
+                                    .update_subscription_sync_result(
+                                        source.id,
+                                        0,
+                                        Some(&e.to_string()),
+                                    )
+                                    .await;
                                 error!(
                                     source_id = source.id,
                                     name = %source.name,
@@ -76,7 +85,9 @@ pub async fn start_schedulers(db: Database) {
                         tokio::spawn(async move {
                             let cfg = db2.get_checker_config().await;
                             match checker::run_check_cycle(&db2, &cfg).await {
-                                Ok((s, f)) => info!(success = s, fail = f, "Post-autosync check complete"),
+                                Ok((s, f)) => {
+                                    info!(success = s, fail = f, "Post-autosync check complete")
+                                }
                                 Err(e) => error!(error = %e, "Post-autosync check failed"),
                             }
                         });

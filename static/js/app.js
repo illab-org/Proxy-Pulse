@@ -38,6 +38,7 @@ function logout() {
 let latencyChart = null;
 let protocolChart = null;
 let scoreChart = null;
+let topProxyGroup = 'all';
 
 // ─── Chart.js Global Defaults ───
 function updateChartTheme() {
@@ -84,6 +85,8 @@ const CHART_PALETTE = [
 document.addEventListener('DOMContentLoaded', async () => {
     await I18N.ready;
     initCharts();
+    initTopGroupFilter();
+    await loadTopProxyGroups();
     fetchAllData();
     setInterval(fetchAllData, REFRESH_INTERVAL);
 
@@ -99,9 +102,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ─── Fetch All Data ───
 async function fetchAllData() {
     try {
+        let topUrl = `${API_BASE}/proxy/top?limit=20`;
+        if (topProxyGroup && topProxyGroup !== 'all') {
+            topUrl += `&group=${encodeURIComponent(topProxyGroup)}`;
+        }
+
         const [statsRes, topRes] = await Promise.all([
             authFetch(`${API_BASE}/proxy/stats`),
-            authFetch(`${API_BASE}/proxy/top?limit=20`),
+            authFetch(topUrl),
         ]);
 
         if (statsRes.ok) {
@@ -123,6 +131,30 @@ async function fetchAllData() {
             `${I18N.t('dashboard.last_update')}: ${TZ.fmtTime(new Date())}`;
     } catch (err) {
         console.error('Failed to fetch data:', err);
+    }
+}
+
+function initTopGroupFilter() {
+    const sel = document.getElementById('topGroupFilter');
+    if (!sel) return;
+    sel.addEventListener('change', () => {
+        topProxyGroup = sel.value || 'all';
+        fetchAllData();
+    });
+}
+
+async function loadTopProxyGroups() {
+    const sel = document.getElementById('topGroupFilter');
+    if (!sel) return;
+    try {
+        const resp = await authFetch(`${API_BASE}/proxy/groups`);
+        const json = await resp.json();
+        if (!json.success) return;
+        const groups = Array.from(new Set(['default', ...(json.data || [])]));
+        sel.innerHTML = '<option value="all">ALL</option>' + groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+        sel.value = topProxyGroup;
+    } catch (_) {
+        sel.innerHTML = '<option value="all">ALL</option>';
     }
 }
 

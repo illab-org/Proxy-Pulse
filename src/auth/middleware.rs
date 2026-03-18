@@ -7,7 +7,9 @@ use axum::{
 use chrono::{Duration, Utc};
 use std::sync::Arc;
 
-use super::{extract_api_key, extract_bearer_token, extract_token, hash_api_key, TOKEN_EXPIRY_HOURS};
+use super::{
+    extract_api_key, extract_bearer_token, extract_token, hash_api_key, TOKEN_EXPIRY_HOURS,
+};
 use crate::api::AppState;
 
 pub async fn auth_middleware(

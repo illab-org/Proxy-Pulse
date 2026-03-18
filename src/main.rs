@@ -4,8 +4,8 @@ mod auth;
 mod checker;
 mod config;
 mod db;
-mod models;
 mod mem_monitor;
+mod models;
 mod scheduler;
 mod sources;
 mod updater;
@@ -26,17 +26,17 @@ pub static malloc_conf: &[u8] = b"dirty_decay_ms:1000,muzzy_decay_ms:1000,narena
 use std::sync::Arc;
 
 use axum::extract::DefaultBodyLimit;
-use axum::{middleware, Router};
 use axum::http::{header, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
+use axum::{middleware, Router};
 use rust_embed::Embed;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
 use tracing::info;
-use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 
 #[derive(Embed)]
 #[folder = "static/"]
@@ -58,18 +58,13 @@ async fn main() -> anyhow::Result<()> {
     let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
 
     tracing_subscriber::registry()
-        .with(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_target(false)
-        )
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with(tracing_subscriber::fmt::layer().with_target(false))
         .with(
             tracing_subscriber::fmt::layer()
                 .with_target(false)
                 .with_ansi(false)
-                .with_writer(file_writer)
+                .with_writer(file_writer),
         )
         .init();
 
@@ -83,7 +78,8 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Database URL: from CLI arg, env var, or default
-    let db_url = args.iter()
+    let db_url = args
+        .iter()
         .skip(1)
         .find(|a| *a != "--demo")
         .cloned()
@@ -102,7 +98,11 @@ async fn main() -> anyhow::Result<()> {
         .next()
         .unwrap_or("proxy_pulse.db")
         .to_string();
-    let state = Arc::new(AppState { db: db.clone(), demo_mode, db_path });
+    let state = Arc::new(AppState {
+        db: db.clone(),
+        demo_mode,
+        db_path,
+    });
 
     // Start background schedulers
     scheduler::start_schedulers(db.clone()).await;
@@ -129,43 +129,87 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/v1/auth/logout", axum::routing::post(auth::logout));
 
     // Proxy export routes — accept session token OR API key
-    let proxy_api = api::proxy_api_router()
-        .layer(middleware::from_fn_with_state(state.clone(), auth::proxy_api_auth_middleware));
+    let proxy_api = api::proxy_api_router().layer(middleware::from_fn_with_state(
+        state.clone(),
+        auth::proxy_api_auth_middleware,
+    ));
 
     // Admin/internal API routes — admin role only
     let admin_api = api::admin_api_router()
-        .layer(middleware::from_fn_with_state(state.clone(), auth::admin_auth_middleware))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::admin_auth_middleware,
+        ))
         .layer(DefaultBodyLimit::disable());
 
     // Auth-management routes (change password, API keys, preferences, me) — session token only
     let auth_mgmt = Router::new()
         .route("/api/v1/auth/me", axum::routing::get(auth::get_me))
-        .route("/api/v1/auth/change-password", axum::routing::post(auth::change_password))
-        .route("/api/v1/auth/api-keys", axum::routing::get(auth::list_api_keys))
-        .route("/api/v1/auth/api-keys", axum::routing::post(auth::create_api_key))
-        .route("/api/v1/auth/api-keys/:id", axum::routing::delete(auth::delete_api_key))
-        .route("/api/v1/auth/preferences", axum::routing::get(auth::get_preferences))
-        .route("/api/v1/auth/preferences", axum::routing::put(auth::save_preferences))
-        .layer(middleware::from_fn_with_state(state.clone(), auth::auth_middleware));
+        .route(
+            "/api/v1/auth/change-password",
+            axum::routing::post(auth::change_password),
+        )
+        .route(
+            "/api/v1/auth/api-keys",
+            axum::routing::get(auth::list_api_keys),
+        )
+        .route(
+            "/api/v1/auth/api-keys",
+            axum::routing::post(auth::create_api_key),
+        )
+        .route(
+            "/api/v1/auth/api-keys/:id",
+            axum::routing::delete(auth::delete_api_key),
+        )
+        .route(
+            "/api/v1/auth/preferences",
+            axum::routing::get(auth::get_preferences),
+        )
+        .route(
+            "/api/v1/auth/preferences",
+            axum::routing::put(auth::save_preferences),
+        )
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::auth_middleware,
+        ));
 
     // Protected page routes (redirect to /login if no cookie)
     let protected_pages = Router::new()
         .route("/", axum::routing::get(dashboard_page))
         .route("/settings", axum::routing::get(settings_page))
-        .layer(middleware::from_fn_with_state(state.clone(), auth::page_auth_middleware));
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::page_auth_middleware,
+        ));
 
     // Admin page (admin role only, redirects to / if not admin)
     let admin_page_route = Router::new()
         .route("/admin", axum::routing::get(admin_page))
-        .layer(middleware::from_fn_with_state(state.clone(), auth::page_admin_middleware));
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::page_admin_middleware,
+        ));
 
     // User management routes (admin only)
     let user_mgmt = Router::new()
         .route("/api/v1/admin/users", axum::routing::get(auth::list_users))
-        .route("/api/v1/admin/users", axum::routing::post(auth::create_user_handler))
-        .route("/api/v1/admin/users/:id", axum::routing::delete(auth::delete_user_handler))
-        .route("/api/v1/admin/users/:id", axum::routing::put(auth::update_user_handler))
-        .layer(middleware::from_fn_with_state(state.clone(), auth::admin_auth_middleware));
+        .route(
+            "/api/v1/admin/users",
+            axum::routing::post(auth::create_user_handler),
+        )
+        .route(
+            "/api/v1/admin/users/:id",
+            axum::routing::delete(auth::delete_user_handler),
+        )
+        .route(
+            "/api/v1/admin/users/:id",
+            axum::routing::put(auth::update_user_handler),
+        )
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::admin_auth_middleware,
+        ));
 
     let app = Router::new()
         // Login page (public)
@@ -193,7 +237,12 @@ async fn main() -> anyhow::Result<()> {
             header::HeaderValue::from_static("no-cache, must-revalidate"),
         ))
         // Middleware
-        .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        )
         .layer(TraceLayer::new_for_http())
         // Shared state
         .with_state(state);
@@ -250,9 +299,7 @@ async fn static_handler(axum::extract::Path(path): axum::extract::Path<String>) 
 /// Serve favicon.ico (embedded SVG)
 async fn favicon_handler() -> Response {
     match StaticAssets::get("favicon.svg") {
-        Some(file) => {
-            ([(header::CONTENT_TYPE, "image/svg+xml")], file.data).into_response()
-        }
+        Some(file) => ([(header::CONTENT_TYPE, "image/svg+xml")], file.data).into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
     }
 }

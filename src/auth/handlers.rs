@@ -211,8 +211,8 @@ pub async fn change_password(
         return Err(err("Current password is incorrect"));
     }
 
-    let new_hash =
-        bcrypt::hash(&body.new_password, bcrypt::DEFAULT_COST).map_err(|_| err("Failed to hash password"))?;
+    let new_hash = bcrypt::hash(&body.new_password, bcrypt::DEFAULT_COST)
+        .map_err(|_| err("Failed to hash password"))?;
     state
         .db
         .update_user_password(user_id, &new_hash)

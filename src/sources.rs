@@ -124,12 +124,14 @@ pub async fn sync_subscription_sources(db: &Database) -> Result<usize> {
         let result = sync_single_subscription(db, source).await;
         match result {
             Ok(count) => {
-                db.update_subscription_sync_result(source.id, count as i64, None).await?;
+                db.update_subscription_sync_result(source.id, count as i64, None)
+                    .await?;
                 info!(source_id = source.id, name = %source.name, count = count, "Subscription synced");
                 total += count;
             }
             Err(e) => {
-                db.update_subscription_sync_result(source.id, 0, Some(&e.to_string())).await?;
+                db.update_subscription_sync_result(source.id, 0, Some(&e.to_string()))
+                    .await?;
                 warn!(source_id = source.id, name = %source.name, error = %e, "Subscription sync failed");
             }
         }
@@ -144,14 +146,22 @@ pub async fn sync_single_subscription(
 ) -> Result<usize> {
     let proxies = match source.source_type.as_str() {
         "url" => {
-            let url = source.url.as_deref().ok_or_else(|| anyhow::anyhow!("URL is empty"))?;
+            let url = source
+                .url
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("URL is empty"))?;
             load_from_url(url).await?
         }
         "text" => {
             let content = source.content.as_deref().unwrap_or("");
             parse_proxy_list(content)
         }
-        _ => return Err(anyhow::anyhow!("Unknown source type: {}", source.source_type)),
+        _ => {
+            return Err(anyhow::anyhow!(
+                "Unknown source type: {}",
+                source.source_type
+            ))
+        }
     };
 
     let source_tag = format!("sub:{}:{}", source.id, source.name);

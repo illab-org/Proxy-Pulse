@@ -1045,6 +1045,9 @@
                             <option value="dead" data-i18n="admin.filter_dead">Dead</option>
                             <option value="untested">Untested</option>
                         </select>
+                        <select class="form-select" id="filterGroup">
+                            <option value="all">All Groups</option>
+                        </select>
                         <input type="text" class="form-input" id="filterSearch" placeholder="Search proxy / country / source" style="min-width:220px;">
                         <button class="btn btn-primary btn-sm" onclick="openImportModal()">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
@@ -1052,11 +1055,11 @@
                             </svg>
                             <span data-i18n="admin.tab_import">Bulk Import</span>
                         </button>
-                        <button class="btn btn-danger btn-sm" onclick="deleteDeadProxies()">
+                        <button class="btn btn-outline btn-sm" onclick="openGroupManagerModal()">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
-                                <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                                <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>
                             </svg>
-                            <span data-i18n="admin.purge_dead">Purge Dead</span>
+                            <span>Group Management</span>
                         </button>
                         <button class="btn btn-outline btn-sm" onclick="loadProxies()">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
@@ -1074,6 +1077,7 @@
                                 <th data-i18n="admin.th_protocol">Protocol</th>
                                 <th data-i18n="admin.th_country">Country</th>
                                 <th data-i18n="admin.th_status">Status</th>
+                                <th>Group</th>
                                 <th data-i18n="admin.th_score">Score</th>
                                 <th data-i18n="admin.th_latency">Latency</th>
                                 <th data-i18n="admin.th_success_fail">Success / Fail</th>
@@ -1084,7 +1088,7 @@
                             </tr>
                         </thead>
                         <tbody id="proxyTableBody">
-                            <tr><td colspan="11"><div class="loading-overlay"><span class="spinner"></span> <span data-i18n="admin.loading_proxies">Loading proxies...</span></div></td></tr>
+                            <tr><td colspan="12"><div class="loading-overlay"><span class="spinner"></span> <span data-i18n="admin.loading_proxies">Loading proxies...</span></div></td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1692,6 +1696,71 @@
         </div>
     </div>
 
+    <!-- ═══ Proxy Group Manager Modal ═══ -->
+    <div class="modal-overlay" id="groupManagerModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;color:var(--accent-cyan);">
+                        <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>
+                    </svg>
+                    <span>Proxy Group Management</span>
+                </div>
+                <button class="modal-close" onclick="closeModal('groupManagerModal')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Create Group</label>
+                <div style="display:flex;gap:8px;">
+                    <input type="text" class="form-input" id="newGroupName" placeholder="e.g. premium">
+                    <button class="btn btn-primary" type="button" onclick="createGroup()">Create</button>
+                </div>
+            </div>
+            <div id="groupListContainer"></div>
+        </div>
+    </div>
+
+    <!-- ═══ Edit Proxy Group Modal ═══ -->
+    <div class="modal-overlay" id="editProxyModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;color:var(--accent-cyan);">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                    <span>Edit Proxy</span>
+                </div>
+                <button class="modal-close" onclick="closeModal('editProxyModal')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <form id="editProxyForm" onsubmit="updateProxyGroup(event)">
+                <input type="hidden" id="editProxyId">
+                <div class="form-group">
+                    <label class="form-label">Proxy</label>
+                    <input type="text" class="form-input" id="editProxyAddr" readonly style="opacity:0.7;">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Protocol</label>
+                    <input type="text" class="form-input" id="editProxyProtocol" readonly style="opacity:0.7;">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Source</label>
+                    <input type="text" class="form-input" id="editProxySource" readonly style="opacity:0.7;">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Group</label>
+                    <select class="form-select" id="editProxyGroup" required></select>
+                </div>
+                <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+                    <button type="button" class="btn btn-outline" onclick="closeModal('editProxyModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
     // ═══════════════════════════════════════════════
     //  Admin Panel Logic
@@ -1701,6 +1770,7 @@
     let proxyPage = 1;
     const proxyPerPage = 25;
     let isDemoMode = false;
+    let proxyGroups = ['default'];
 
     // ─── Custom Select Dropdown ───
     function upgradeSelects() {
@@ -1885,14 +1955,14 @@
         upgradeSelects();
         loadUserInfo();
         loadPreferences();
-        loadProxies();
+        loadProxyGroups().then(() => loadProxies()).catch(() => loadProxies());
         loadSources();
         loadUsers();
         loadCheckerSettings();
         loadSystemSettings();
         // Re-render dynamic content when locale changes
         I18N.onChange(() => {
-            loadProxies();
+            loadProxyGroups().then(() => loadProxies()).catch(() => loadProxies());
             loadSources();
             loadUsers();
             // Rebuild custom selects after i18n text update
@@ -1952,6 +2022,11 @@
     function openImportModal() { openModal('importModal'); }
     function openAddSourceModal() { openModal('addSourceModal'); }
     function openCreateUserModal() { openModal('createUserModal'); }
+    async function openGroupManagerModal() {
+        await loadProxyGroups();
+        renderGroupList();
+        openModal('groupManagerModal');
+    }
     function openEditUserModal(id, username, role) {
         document.getElementById('editUserId').value = id;
         document.getElementById('editUsername').value = username;
@@ -1981,14 +2056,16 @@
     async function loadProxies() {
         const protocol = document.getElementById('filterProtocol').value;
         const status = document.getElementById('filterAlive').value;
+        const group = document.getElementById('filterGroup').value;
         const search = document.getElementById('filterSearch').value.trim();
         const params = new URLSearchParams({ page: proxyPage, per_page: proxyPerPage });
         if (protocol !== 'all') params.set('protocol', protocol);
         if (status !== '') params.set('status', status);
+        if (group !== 'all') params.set('group', group);
         if (search !== '') params.set('search', search);
 
         const tbody = document.getElementById('proxyTableBody');
-        tbody.innerHTML = '<tr><td colspan="11"><div class="loading-overlay"><span class="spinner"></span> Loading...</div></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12"><div class="loading-overlay"><span class="spinner"></span> Loading...</div></td></tr>';
 
         try {
             const resp = await authFetch(`${API}/proxy/list?${params}`);
@@ -1997,7 +2074,7 @@
 
             const { proxies, total, page, per_page } = json.data;
             if (proxies.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state"><p>No proxies found</p></div></td></tr>';
+                tbody.innerHTML = '<tr><td colspan="12"><div class="empty-state"><p>No proxies found</p></div></td></tr>';
                 document.getElementById('proxyPagination').innerHTML = '';
                 return;
             }
@@ -2008,6 +2085,7 @@
                     <td><span class="badge badge-protocol">${escHtml(p.protocol.toUpperCase())}</span></td>
                     <td>${escHtml(p.country)}</td>
                     <td>${renderProxyStatus(p)}</td>
+                    <td><span class="badge badge-protocol">${escHtml((p.group || 'default').toUpperCase())}</span></td>
                     <td class="${scoreClass(p.score)}" style="font-weight:600;">${p.score.toFixed(1)}</td>
                     <td class="mono">${p.latency_ms > 0 ? p.latency_ms.toFixed(0) + 'ms' : '—'}</td>
                     <td><span style="color:var(--accent-green)">${p.success_count}</span> / <span style="color:var(--accent-red)">${p.fail_count}</span></td>
@@ -2016,6 +2094,11 @@
                     <td style="font-size:0.78rem;color:var(--text-dim)">${TZ.fmt(p.next_check_at)}</td>
                     <td>
                         <div class="row-actions">
+                            <button class="btn btn-outline btn-icon btn-sm" onclick='openEditProxyModal(${p.id}, ${JSON.stringify(p.proxy)}, ${JSON.stringify(p.protocol)}, ${JSON.stringify(p.source)}, ${JSON.stringify(p.group || "default")})' title="Edit">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                </svg>
+                            </button>
                             <button class="btn btn-danger btn-icon btn-sm" onclick="deleteProxy(${p.id})" title="Delete">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
                                     <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
@@ -2040,7 +2123,7 @@
             document.getElementById('proxyPagination').innerHTML = pagHtml;
 
         } catch (e) {
-            tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state"><p style="color:var(--accent-red)">Error: ${escHtml(e.message)}</p></div></td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="12"><div class="empty-state"><p style="color:var(--accent-red)">Error: ${escHtml(e.message)}</p></div></td></tr>`;
         }
     }
 
@@ -2057,6 +2140,124 @@
         return p.is_alive
             ? '<span class="badge badge-alive">ALIVE</span>'
             : '<span class="badge badge-dead">DEAD</span>';
+    }
+
+    async function loadProxyGroups() {
+        const resp = await authFetch(`${API}/proxy/groups`);
+        const json = await resp.json();
+        if (!json.success) throw new Error(json.error || 'failed to load groups');
+        proxyGroups = Array.from(new Set(['default', ...(json.data || [])]));
+
+        const filterSel = document.getElementById('filterGroup');
+        if (filterSel) {
+            const prev = filterSel.value || 'all';
+            filterSel.innerHTML = '<option value="all">All Groups</option>' + proxyGroups.map(g => `<option value="${escHtml(g)}">${escHtml(g)}</option>`).join('');
+            filterSel.value = proxyGroups.includes(prev) ? prev : 'all';
+            if (filterSel._csRebuild) filterSel._csRebuild();
+        }
+
+        const editSel = document.getElementById('editProxyGroup');
+        if (editSel) {
+            const prev = editSel.value || 'default';
+            editSel.innerHTML = proxyGroups.map(g => `<option value="${escHtml(g)}">${escHtml(g)}</option>`).join('');
+            editSel.value = proxyGroups.includes(prev) ? prev : 'default';
+            if (editSel._csRebuild) editSel._csRebuild();
+        }
+    }
+
+    function renderGroupList() {
+        const wrap = document.getElementById('groupListContainer');
+        if (!wrap) return;
+        wrap.innerHTML = proxyGroups.map(g => {
+            const isDefault = g === 'default';
+            return `
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                    <input type="text" class="form-input" data-old-group="${escHtml(g)}" value="${escHtml(g)}" ${isDefault ? 'readonly style="opacity:0.7;"' : ''}>
+                    ${isDefault ? '' : `<button class="btn btn-outline btn-sm" onclick='renameGroup(${JSON.stringify(g)})'>Rename</button>`}
+                    ${isDefault ? '' : `<button class="btn btn-danger btn-sm" onclick='deleteGroup(${JSON.stringify(g)})'>Delete</button>`}
+                </div>
+            `;
+        }).join('');
+    }
+
+    async function createGroup() {
+        if (demoGuard()) return;
+        const input = document.getElementById('newGroupName');
+        const name = input.value.trim();
+        if (!name) return;
+        const resp = await authFetch(`${API}/proxy/groups/create`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+        });
+        const json = await resp.json();
+        if (!json.success) return showToast('Failed: ' + json.error, 'error');
+        input.value = '';
+        await loadProxyGroups();
+        renderGroupList();
+        loadProxies();
+    }
+
+    async function renameGroup(oldName) {
+        if (demoGuard()) return;
+        const input = Array.from(document.querySelectorAll('#groupListContainer input[data-old-group]'))
+            .find(el => el.dataset.oldGroup === oldName);
+        if (!input) return;
+        const newName = input.value.trim();
+        if (!newName || newName === oldName) return;
+        const resp = await authFetch(`${API}/proxy/groups/rename`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ old_name: oldName, new_name: newName }),
+        });
+        const json = await resp.json();
+        if (!json.success) return showToast('Failed: ' + json.error, 'error');
+        await loadProxyGroups();
+        renderGroupList();
+        loadProxies();
+    }
+
+    async function deleteGroup(name) {
+        if (demoGuard()) return;
+        if (!confirm(`Delete group "${name}"? Proxies will move to default.`)) return;
+        const resp = await authFetch(`${API}/proxy/groups/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+        });
+        const json = await resp.json();
+        if (!json.success) return showToast('Failed: ' + json.error, 'error');
+        await loadProxyGroups();
+        renderGroupList();
+        loadProxies();
+    }
+
+    async function openEditProxyModal(id, proxy, protocol, source, group) {
+        await loadProxyGroups();
+        document.getElementById('editProxyId').value = id;
+        document.getElementById('editProxyAddr').value = proxy;
+        document.getElementById('editProxyProtocol').value = protocol;
+        document.getElementById('editProxySource').value = source;
+        document.getElementById('editProxyGroup').value = proxyGroups.includes(group) ? group : 'default';
+        if (document.getElementById('editProxyGroup')._csRebuild) document.getElementById('editProxyGroup')._csRebuild();
+        openModal('editProxyModal');
+    }
+
+    async function updateProxyGroup(event) {
+        event.preventDefault();
+        if (demoGuard()) return;
+        const id = document.getElementById('editProxyId').value;
+        const group = document.getElementById('editProxyGroup').value;
+        const resp = await authFetch(`${API}/proxy/update-group/${id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ group }),
+        });
+        const json = await resp.json();
+        if (!json.success) return showToast('Failed: ' + json.error, 'error');
+        closeModal('editProxyModal');
+        showToast('Proxy group updated', 'success');
+        loadProxies();
     }
 
     async function deleteProxy(id) {
@@ -2092,6 +2293,7 @@
     // Filter change listeners
     document.getElementById('filterProtocol').addEventListener('change', () => { proxyPage = 1; loadProxies(); });
     document.getElementById('filterAlive').addEventListener('change', () => { proxyPage = 1; loadProxies(); });
+    document.getElementById('filterGroup').addEventListener('change', () => { proxyPage = 1; loadProxies(); });
     let proxySearchTimer = null;
     document.getElementById('filterSearch').addEventListener('input', () => {
         clearTimeout(proxySearchTimer);

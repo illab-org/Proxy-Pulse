@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use chrono::Timelike;
+use std::path::PathBuf;
 use tokio::process::Command;
 use tracing::{error, info, warn};
 
@@ -17,7 +17,11 @@ struct ReleaseEntry {
 /// Check if the release binary asset exists for the current platform
 async fn release_has_binary(version: &str) -> bool {
     let (os_name, arch_name) = detect_platform();
-    let ext = if os_name == "windows" { "zip" } else { "tar.gz" };
+    let ext = if os_name == "windows" {
+        "zip"
+    } else {
+        "tar.gz"
+    };
     let artifact = format!("proxy-pulse-{}-{}.{}", os_name, arch_name, ext);
     let url = format!(
         "https://github.com/{}/releases/download/{}/{}",
@@ -102,10 +106,10 @@ async fn is_within_schedule(db: &Database) -> bool {
     let hour = chrono::Local::now().hour();
     match schedule.as_str() {
         "anytime" => true,
-        "night" => hour < 6,               // 00:00–06:00
-        "morning" => (6..12).contains(&hour),   // 06:00–12:00
+        "night" => hour < 6,                     // 00:00–06:00
+        "morning" => (6..12).contains(&hour),    // 06:00–12:00
         "afternoon" => (12..18).contains(&hour), // 12:00–18:00
-        "evening" => hour >= 18,            // 18:00–00:00
+        "evening" => hour >= 18,                 // 18:00–00:00
         _ => true,
     }
 }
@@ -139,7 +143,11 @@ pub async fn update_to_version(version: &str) -> anyhow::Result<bool> {
         return Err(anyhow::anyhow!("BINARY_NOT_READY"));
     }
 
-    info!(current = current_version, target = target, "Updating to specific version");
+    info!(
+        current = current_version,
+        target = target,
+        "Updating to specific version"
+    );
 
     if is_docker() {
         download_and_replace_binary(&tag).await?;
@@ -251,7 +259,11 @@ fn is_docker() -> bool {
 /// Download the latest binary and replace the current executable (for Docker updates)
 async fn download_and_replace_binary(tag: &str) -> anyhow::Result<()> {
     let (os_name, arch_name) = detect_platform();
-    let ext = if os_name == "windows" { "zip" } else { "tar.gz" };
+    let ext = if os_name == "windows" {
+        "zip"
+    } else {
+        "tar.gz"
+    };
     let artifact = format!("proxy-pulse-{}-{}", os_name, arch_name);
     let pkg_file = format!("{}.{}", artifact, ext);
     let url = format!(
@@ -268,12 +280,17 @@ async fn download_and_replace_binary(tag: &str) -> anyhow::Result<()> {
 
     let resp = client.get(&url).send().await?;
     if !resp.status().is_success() && resp.status().as_u16() != 302 {
-        return Err(anyhow::anyhow!("Failed to download binary: HTTP {}", resp.status()));
+        return Err(anyhow::anyhow!(
+            "Failed to download binary: HTTP {}",
+            resp.status()
+        ));
     }
     let bytes = resp.bytes().await?;
 
     let exe_path = std::env::current_exe()?;
-    let exe_dir = exe_path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let exe_dir = exe_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."));
     let pkg_path = exe_dir.join(&pkg_file);
 
     // Write archive
@@ -281,7 +298,12 @@ async fn download_and_replace_binary(tag: &str) -> anyhow::Result<()> {
 
     // Extract — for tar.gz, extract then move binary into place
     let output = Command::new("tar")
-        .args(["xzf", &pkg_path.to_string_lossy(), "-C", &exe_dir.to_string_lossy()])
+        .args([
+            "xzf",
+            &pkg_path.to_string_lossy(),
+            "-C",
+            &exe_dir.to_string_lossy(),
+        ])
         .output()
         .await?;
 
@@ -413,10 +435,7 @@ async fn find_or_download_run_script(exe_dir: &PathBuf) -> anyhow::Result<PathBu
     // Download run script from GitHub main branch
     let (script_url, script_name) = if cfg!(windows) {
         (
-            format!(
-                "https://raw.githubusercontent.com/{}/main/run.ps1",
-                REPO
-            ),
+            format!("https://raw.githubusercontent.com/{}/main/run.ps1", REPO),
             "run.ps1",
         )
     } else {

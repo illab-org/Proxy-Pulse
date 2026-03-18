@@ -68,11 +68,7 @@ fn extract_bearer_token(req: &Request) -> Option<String> {
 }
 
 fn extract_api_key(req: &Request) -> Option<String> {
-    if let Some(key) = req
-        .headers()
-        .get("X-API-Key")
-        .and_then(|v| v.to_str().ok())
-    {
+    if let Some(key) = req.headers().get("X-API-Key").and_then(|v| v.to_str().ok()) {
         if key.starts_with("ppk_") {
             return Some(key.to_string());
         }

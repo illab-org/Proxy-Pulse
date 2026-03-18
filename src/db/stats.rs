@@ -158,12 +158,30 @@ impl Database {
         .await?;
 
         Ok(vec![
-            ScoreBucket { range: "0-20".to_string(), count: row.0 },
-            ScoreBucket { range: "20-40".to_string(), count: row.1 },
-            ScoreBucket { range: "40-60".to_string(), count: row.2 },
-            ScoreBucket { range: "60-80".to_string(), count: row.3 },
-            ScoreBucket { range: "80-90".to_string(), count: row.4 },
-            ScoreBucket { range: "90-100".to_string(), count: row.5 },
+            ScoreBucket {
+                range: "0-20".to_string(),
+                count: row.0,
+            },
+            ScoreBucket {
+                range: "20-40".to_string(),
+                count: row.1,
+            },
+            ScoreBucket {
+                range: "40-60".to_string(),
+                count: row.2,
+            },
+            ScoreBucket {
+                range: "60-80".to_string(),
+                count: row.3,
+            },
+            ScoreBucket {
+                range: "80-90".to_string(),
+                count: row.4,
+            },
+            ScoreBucket {
+                range: "90-100".to_string(),
+                count: row.5,
+            },
         ])
     }
 }
