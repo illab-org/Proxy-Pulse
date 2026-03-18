@@ -557,7 +557,15 @@ impl Database {
             .await
             .ok()
             .flatten()
-            .map(|v| serde_json::from_str(&v).unwrap_or_default())
+            .and_then(|v| serde_json::from_str::<Vec<String>>(&v).ok())
+            .map(|items| {
+                items
+                    .into_iter()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>()
+            })
+            .filter(|items| !items.is_empty())
             .unwrap_or_else(|| cfg.targets.clone());
 
         let mut fail_intervals = Vec::with_capacity(10);

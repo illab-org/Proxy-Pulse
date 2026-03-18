@@ -637,6 +637,13 @@ async fn admin_save_checker_settings(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
     demo_guard(&state)?;
 
+    let sanitized_targets: Vec<String> = body
+        .targets
+        .iter()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect();
+
     // Basic validation
     if body.interval_secs < 3 || body.interval_secs > 300 {
         return Err((
@@ -665,7 +672,7 @@ async fn admin_save_checker_settings(
             }),
         ));
     }
-    if body.targets.is_empty() {
+    if sanitized_targets.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
@@ -693,7 +700,12 @@ async fn admin_save_checker_settings(
         ));
     }
 
-    state.db.save_checker_config(&body).await.map_err(|e| {
+    let config_to_save = crate::config::CheckerConfig {
+        targets: sanitized_targets,
+        ..body
+    };
+
+    state.db.save_checker_config(&config_to_save).await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
