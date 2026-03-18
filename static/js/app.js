@@ -148,13 +148,30 @@ async function loadTopProxyGroups() {
     if (!sel) return;
     try {
         const resp = await authFetch(`${API_BASE}/proxy/groups`);
+        if (!resp.ok) {
+            throw new Error('Failed to load proxy groups');
+        }
         const json = await resp.json();
-        if (!json.success) return;
-        const groups = Array.from(new Set(['default', ...(json.data || [])]));
-        sel.innerHTML = '<option value="all">ALL</option>' + groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+        if (!json.success) {
+            throw new Error('Proxy groups API returned unsuccessful response');
+        }
+
+        const realGroups = Array.isArray(json.data) ? json.data : [];
+        const groups = Array.from(
+            new Set(
+                realGroups
+                    .map(g => (typeof g === 'string' ? g.trim() : ''))
+                    .filter(g => g && g.toLowerCase() !== 'all')
+            )
+        );
+        const allLabel = I18N.t('dashboard.api_limit_all') || 'ALL';
+        sel.innerHTML = `<option value="all">${escapeHtml(allLabel)}</option>` +
+            groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
         sel.value = topProxyGroup;
     } catch (_) {
-        sel.innerHTML = '<option value="all">ALL</option>';
+        const allLabel = I18N.t('dashboard.api_limit_all') || 'ALL';
+        sel.innerHTML = `<option value="all">${escapeHtml(allLabel)}</option>`;
+        sel.value = 'all';
     }
 }
 

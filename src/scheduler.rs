@@ -101,24 +101,26 @@ pub async fn start_schedulers(db: Database) {
 
     let db_checker = db.clone();
 
-    // Proxy checker scheduler — reads config from DB each cycle
+    // Proxy checker scheduler — 1s tick scans due queue only.
     tokio::spawn(async move {
         info!("Starting proxy checker scheduler");
 
         // Wait a bit for initial source sync to populate proxies
         tokio::time::sleep(Duration::from_secs(5)).await;
 
+        let mut ticker = interval(Duration::from_secs(1));
+        ticker.tick().await;
+
         loop {
+            ticker.tick().await;
+
             // Re-read config from DB each cycle so admin changes take effect immediately
             let cfg = db_checker.get_checker_config().await;
-            let interval_secs = cfg.interval_secs;
 
             match checker::run_check_cycle(&db_checker, &cfg).await {
                 Ok((s, f)) => info!(success = s, fail = f, "Check cycle complete"),
                 Err(e) => error!(error = %e, "Check cycle failed"),
             }
-
-            tokio::time::sleep(Duration::from_secs(interval_secs)).await;
         }
     });
 

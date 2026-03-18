@@ -252,10 +252,16 @@ impl Database {
             SELECT name FROM (
                 SELECT 'default' AS name
                 UNION
-                SELECT DISTINCT group_name AS name FROM subscription_sources WHERE group_name IS NOT NULL AND TRIM(group_name) <> ''
+                SELECT DISTINCT TRIM(s.group_name) AS name
+                FROM subscription_sources s
+                WHERE s.group_name IS NOT NULL AND TRIM(s.group_name) <> ''
                 UNION
-                SELECT name FROM proxy_groups
+                SELECT DISTINCT TRIM(COALESCE(s.group_name, 'default')) AS name
+                FROM proxies p
+                LEFT JOIN subscription_sources s ON s.id = p.subscription_id
+                WHERE TRIM(COALESCE(s.group_name, 'default')) <> ''
             ) g
+            WHERE LOWER(name) <> 'all'
             ORDER BY CASE WHEN name = 'default' THEN 0 ELSE 1 END, name
             "#,
         )

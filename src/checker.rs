@@ -68,9 +68,10 @@ async fn run_check_cycle_inner(
         let permit = semaphore.clone().acquire_owned().await?;
         let db = db.clone();
         let targets = targets.clone();
+        let checker_cfg = checker_cfg.clone();
 
         let handle = tokio::spawn(async move {
-            let result = check_single_proxy(&db, &proxy, &targets, timeout).await;
+            let result = check_single_proxy(&db, &proxy, &targets, timeout, &checker_cfg).await;
             drop(permit);
             result
         });
@@ -106,6 +107,7 @@ async fn check_single_proxy(
     proxy: &Proxy,
     targets: &[String],
     timeout: std::time::Duration,
+    checker_cfg: &CheckerConfig,
 ) -> Result<bool> {
     let proxy_addr = format!("{}:{}", proxy.ip, proxy.port);
 
@@ -187,8 +189,9 @@ async fn check_single_proxy(
         None
     };
 
-    // Calculate next check time using adaptive backoff
-    let next_check = calculate_next_check(proxy, any_success);
+    // Calculate next check time from configured success/fail intervals.
+    // fail_count remains historical total and is never reset on success.
+    let next_check = calculate_next_check(proxy, any_success, checker_cfg);
 
     db.update_proxy_check(proxy.id, any_success, avg_latency, next_check)
         .await?;
@@ -221,27 +224,27 @@ async fn check_with_client(client: &reqwest::Client, target: &str) -> Result<()>
     }
 }
 
-/// Adaptive backoff: calculate next check time based on consecutive failures
-fn calculate_next_check(proxy: &Proxy, success: bool) -> chrono::NaiveDateTime {
+/// Calculate next check time from checker settings.
+/// Success uses success interval; failure uses tier by historical fail_count.
+fn calculate_next_check(
+    proxy: &Proxy,
+    success: bool,
+    checker_cfg: &CheckerConfig,
+) -> chrono::NaiveDateTime {
     let now = Utc::now().naive_utc();
 
     if success {
-        // Successful — check again in 3 minutes
-        now + Duration::minutes(3)
+        now + Duration::seconds(checker_cfg.interval_secs as i64)
     } else {
-        let consecutive = proxy.consecutive_fails + 1; // +1 for this failure
-        let minutes = match consecutive {
-            1 => 3,    // 1st failure: 3 minutes
-            2 => 10,   // 2nd failure: 10 minutes
-            3 => 30,   // 3rd failure: 30 minutes
-            4 => 60,   // 4th failure: 1 hour
-            5 => 180,  // 5th failure: 3 hours
-            6 => 360,  // 6th failure: 6 hours
-            7 => 720,  // 7th failure: 12 hours
-            8 => 1440, // 8th failure: 24 hours
-            _ => 2880, // 9th+: 48 hours (max)
-        };
-        now + Duration::minutes(minutes)
+        let fail_total_after_this_check = (proxy.fail_count + 1).max(1) as usize;
+        let idx = fail_total_after_this_check.saturating_sub(1).min(9);
+        let secs = checker_cfg
+            .fail_intervals_secs
+            .get(idx)
+            .copied()
+            .unwrap_or(60)
+            .max(1);
+        now + Duration::seconds(secs as i64)
     }
 }
 

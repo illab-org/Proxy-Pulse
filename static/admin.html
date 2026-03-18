@@ -1059,7 +1059,7 @@
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
                                 <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>
                             </svg>
-                            <span>Group Management</span>
+                            <span data-i18n="admin.group_management">Group Management</span>
                         </button>
                         <button class="btn btn-outline btn-sm" onclick="loadProxies()">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
@@ -1211,9 +1211,50 @@
                 </div>
                 <form id="checkerSettingsForm" onsubmit="saveCheckerSettings(event)" style="max-width:600px;">
                     <div class="form-group">
-                        <label class="form-label" data-i18n="admin.checker_interval">Check Interval (seconds)</label>
-                        <input type="number" class="form-input" id="checkerInterval" min="10" max="86400" required>
-                        <div class="form-hint" data-i18n="admin.checker_interval_hint">How often proxies are checked (10–86400 seconds)</div>
+                        <label class="form-label" data-i18n="admin.checker_interval">Success Proxy Recheck Interval (seconds)</label>
+                        <input type="number" class="form-input" id="checkerInterval" min="3" max="300" required>
+                        <div class="form-hint" data-i18n="admin.checker_interval_hint">How often successfully checked proxies are checked again (3–300 seconds)</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="admin.fail_interval_1">After 1 failure recheck interval (seconds)</label>
+                        <input type="number" class="form-input" id="failInterval1" min="1" max="86400" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="admin.fail_interval_2">After 2 failures recheck interval (seconds)</label>
+                        <input type="number" class="form-input" id="failInterval2" min="1" max="86400" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="admin.fail_interval_3">After 3 failures recheck interval (seconds)</label>
+                        <input type="number" class="form-input" id="failInterval3" min="1" max="86400" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="admin.fail_interval_4">After 4 failures recheck interval (seconds)</label>
+                        <input type="number" class="form-input" id="failInterval4" min="1" max="86400" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="admin.fail_interval_5">After 5 failures recheck interval (seconds)</label>
+                        <input type="number" class="form-input" id="failInterval5" min="1" max="86400" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="admin.fail_interval_6">After 6 failures recheck interval (seconds)</label>
+                        <input type="number" class="form-input" id="failInterval6" min="1" max="86400" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="admin.fail_interval_7">After 7 failures recheck interval (seconds)</label>
+                        <input type="number" class="form-input" id="failInterval7" min="1" max="86400" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="admin.fail_interval_8">After 8 failures recheck interval (seconds)</label>
+                        <input type="number" class="form-input" id="failInterval8" min="1" max="86400" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="admin.fail_interval_9">After 9 failures recheck interval (seconds)</label>
+                        <input type="number" class="form-input" id="failInterval9" min="1" max="86400" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="admin.fail_interval_10">After 10+ failures recheck interval (seconds)</label>
+                        <input type="number" class="form-input" id="failInterval10" min="1" max="86400" required>
+                        <div class="form-hint" data-i18n="admin.fail_interval_hint">Used when fail_count reaches the tier; for fail_count greater than 10, tier 10 is used.</div>
                     </div>
                     <div class="form-group">
                         <label class="form-label" data-i18n="admin.checker_timeout">Request Timeout (seconds)</label>
@@ -2687,6 +2728,12 @@
             if (json.success) {
                 const cfg = json.data;
                 document.getElementById('checkerInterval').value = cfg.interval_secs;
+                const failIntervals = (cfg.fail_intervals_secs && cfg.fail_intervals_secs.length === 10)
+                    ? cfg.fail_intervals_secs
+                    : [15, 30, 60, 120, 180, 300, 600, 900, 1200, 1800];
+                for (let i = 1; i <= 10; i++) {
+                    document.getElementById(`failInterval${i}`).value = failIntervals[i - 1];
+                }
                 document.getElementById('checkerTimeout').value = cfg.timeout_secs;
                 document.getElementById('checkerConcurrent').value = cfg.max_concurrent;
                 document.getElementById('checkerTargets').value = (cfg.targets || []).join('\n');
@@ -2703,11 +2750,16 @@
         try {
             const targets = document.getElementById('checkerTargets').value
                 .split('\n').map(s => s.trim()).filter(s => s.length > 0);
+            const failIntervals = [];
+            for (let i = 1; i <= 10; i++) {
+                failIntervals.push(parseInt(document.getElementById(`failInterval${i}`).value));
+            }
             const body = {
                 interval_secs: parseInt(document.getElementById('checkerInterval').value),
                 timeout_secs: parseInt(document.getElementById('checkerTimeout').value),
                 max_concurrent: parseInt(document.getElementById('checkerConcurrent').value),
                 targets: targets,
+                fail_intervals_secs: failIntervals,
             };
             const resp = await authFetch('/api/v1/admin/settings/checker', {
                 method: 'POST',

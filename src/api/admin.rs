@@ -638,12 +638,12 @@ async fn admin_save_checker_settings(
     demo_guard(&state)?;
 
     // Basic validation
-    if body.interval_secs < 10 || body.interval_secs > 86400 {
+    if body.interval_secs < 3 || body.interval_secs > 300 {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
                 success: false,
-                error: "interval_secs must be between 10 and 86400".to_string(),
+                error: "interval_secs must be between 3 and 300".to_string(),
             }),
         ));
     }
@@ -671,6 +671,24 @@ async fn admin_save_checker_settings(
             Json(ErrorResponse {
                 success: false,
                 error: "At least one target URL is required".to_string(),
+            }),
+        ));
+    }
+    if body.fail_intervals_secs.len() != 10 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                success: false,
+                error: "fail_intervals_secs must contain exactly 10 entries".to_string(),
+            }),
+        ));
+    }
+    if body.fail_intervals_secs.iter().any(|v| *v == 0 || *v > 86400) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                success: false,
+                error: "each fail interval must be between 1 and 86400".to_string(),
             }),
         ));
     }

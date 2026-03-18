@@ -353,6 +353,10 @@ impl Database {
                 version: "1.2.0",
                 description: "add subscription group field and proxy subscription linkage",
             },
+            DbMigration {
+                version: "1.5.0",
+                description: "add checker fail-tier interval settings",
+            },
         ];
 
         migrations.sort_by(|a, b| {
@@ -383,6 +387,7 @@ impl Database {
                 "1.0.1" => Self::migration_1_0_1(&mut tx).await?,
                 "1.1.0" => Self::migration_1_1_0(&mut tx).await?,
                 "1.2.0" => Self::migration_1_2_0(&mut tx).await?,
+                "1.5.0" => Self::migration_1_5_0(&mut tx).await?,
                 _ => unreachable!("unknown migration version"),
             }
 
@@ -480,6 +485,24 @@ impl Database {
         Ok(())
     }
 
+    async fn migration_1_5_0(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Result<()> {
+        for (idx, default_val) in [15, 30, 60, 120, 180, 300, 600, 900, 1200, 1800]
+            .iter()
+            .enumerate()
+        {
+            let key = format!("checker.fail_interval_{}_secs", idx + 1);
+            sqlx::query(
+                "INSERT INTO system_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING",
+            )
+            .bind(key)
+            .bind(default_val.to_string())
+            .execute(&mut **tx)
+            .await?;
+        }
+
+        Ok(())
+    }
+
     // ── System Settings ──
 
     pub async fn get_setting(&self, key: &str) -> Result<Option<String>> {
@@ -503,45 +526,60 @@ impl Database {
     }
 
     pub async fn get_checker_config(&self) -> CheckerConfig {
+        let mut cfg = CheckerConfig::default();
+
         let interval = self
             .get_setting("checker.interval_secs")
             .await
             .ok()
             .flatten()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(60);
+            .unwrap_or(cfg.interval_secs)
+            .clamp(3, 300);
         let timeout = self
             .get_setting("checker.timeout_secs")
             .await
             .ok()
             .flatten()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(10);
+            .unwrap_or(cfg.timeout_secs)
+            .clamp(1, 120);
         let max_concurrent = self
             .get_setting("checker.max_concurrent")
             .await
             .ok()
             .flatten()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(200);
+            .unwrap_or(cfg.max_concurrent)
+            .clamp(1, 10000);
         let targets = self
             .get_setting("checker.targets")
             .await
             .ok()
             .flatten()
             .map(|v| serde_json::from_str(&v).unwrap_or_default())
-            .unwrap_or_else(|| {
-                vec![
-                    "https://httpbin.org/ip".to_string(),
-                    "https://www.cloudflare.com/cdn-cgi/trace".to_string(),
-                ]
-            });
-        CheckerConfig {
-            interval_secs: interval,
-            timeout_secs: timeout,
-            max_concurrent,
-            targets,
+            .unwrap_or_else(|| cfg.targets.clone());
+
+        let mut fail_intervals = Vec::with_capacity(10);
+        for i in 1..=10 {
+            let key = format!("checker.fail_interval_{}_secs", i);
+            let v = self
+                .get_setting(&key)
+                .await
+                .ok()
+                .flatten()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(cfg.fail_intervals_secs[i - 1])
+                .max(1);
+            fail_intervals.push(v);
         }
+
+        cfg.interval_secs = interval;
+        cfg.timeout_secs = timeout;
+        cfg.max_concurrent = max_concurrent;
+        cfg.targets = targets;
+        cfg.fail_intervals_secs = fail_intervals;
+        cfg
     }
 
     pub async fn save_checker_config(&self, cfg: &CheckerConfig) -> Result<()> {
@@ -553,6 +591,13 @@ impl Database {
             .await?;
         self.set_setting("checker.targets", &serde_json::to_string(&cfg.targets)?)
             .await?;
+        for (idx, interval) in cfg.fail_intervals_secs.iter().take(10).enumerate() {
+            self.set_setting(
+                &format!("checker.fail_interval_{}_secs", idx + 1),
+                &interval.to_string(),
+            )
+            .await?;
+        }
         Ok(())
     }
 
