@@ -21,6 +21,8 @@ pub struct AdminProxyListParams {
     pub per_page: Option<i64>,
     pub alive: Option<bool>,
     pub protocol: Option<String>,
+    pub status: Option<String>,
+    pub search: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -113,7 +115,14 @@ async fn admin_get_proxies(
 
     match state
         .db
-        .get_all_proxies_admin(page, per_page, params.alive, params.protocol.as_deref())
+        .get_all_proxies_admin(
+            page,
+            per_page,
+            params.alive,
+            params.protocol.as_deref(),
+            params.status.as_deref(),
+            params.search.as_deref(),
+        )
         .await
     {
         Ok((proxies, total)) => {

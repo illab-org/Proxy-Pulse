@@ -401,17 +401,33 @@ impl Database {
         per_page: i64,
         filter_alive: Option<bool>,
         filter_protocol: Option<&str>,
+        filter_status: Option<&str>,
+        search: Option<&str>,
     ) -> Result<(Vec<Proxy>, i64)> {
         let offset = (page - 1) * per_page;
 
         let mut where_clauses = Vec::new();
-        if let Some(alive) = filter_alive {
+        if let Some(status) = filter_status {
+            match status {
+                "alive" => where_clauses.push("is_alive = 1".to_string()),
+                "dead" => where_clauses.push("is_alive = 0 AND last_check_at IS NOT NULL".to_string()),
+                "untested" => where_clauses.push("last_check_at IS NULL".to_string()),
+                _ => {}
+            }
+        } else if let Some(alive) = filter_alive {
             where_clauses.push(format!("is_alive = {}", if alive { 1 } else { 0 }));
         }
         if let Some(proto) = filter_protocol {
             if !proto.is_empty() && proto != "all" {
                 where_clauses.push("protocol = ?".to_string());
             }
+        }
+        let search_term = search.map(str::trim).filter(|s| !s.is_empty()).map(|s| format!("%{}%", s));
+        if search_term.is_some() {
+            where_clauses.push(
+                "(ip LIKE ? OR CAST(port AS TEXT) LIKE ? OR country LIKE ? OR source LIKE ? OR protocol LIKE ?)"
+                    .to_string(),
+            );
         }
 
         let where_sql = if where_clauses.is_empty() {
@@ -426,6 +442,14 @@ impl Database {
             if !proto.is_empty() && proto != "all" {
                 count_query = count_query.bind(proto);
             }
+        }
+        if let Some(term) = &search_term {
+            count_query = count_query
+                .bind(term)
+                .bind(term)
+                .bind(term)
+                .bind(term)
+                .bind(term);
         }
         let total: (i64,) = count_query.fetch_one(&self.pool).await?;
 
@@ -447,6 +471,14 @@ impl Database {
             if !proto.is_empty() && proto != "all" {
                 data_query = data_query.bind(proto);
             }
+        }
+        if let Some(term) = &search_term {
+            data_query = data_query
+                .bind(term)
+                .bind(term)
+                .bind(term)
+                .bind(term)
+                .bind(term);
         }
         let proxies = data_query
             .bind(per_page)

@@ -269,6 +269,11 @@
             color: var(--accent-red);
             border: 1px solid rgba(255, 71, 87, 0.2);
         }
+        .badge-unknown {
+            background: rgba(255, 193, 7, 0.14);
+            color: #f1c75a;
+            border: 1px solid rgba(255, 193, 7, 0.28);
+        }
         .badge-protocol {
             background: rgba(0, 240, 255, 0.1);
             color: var(--accent-cyan);
@@ -1036,9 +1041,11 @@
                         </select>
                         <select class="form-select" id="filterAlive">
                             <option value="" data-i18n="admin.filter_all_status">All Status</option>
-                            <option value="true" data-i18n="admin.filter_alive">Alive</option>
-                            <option value="false" data-i18n="admin.filter_dead">Dead</option>
+                            <option value="alive" data-i18n="admin.filter_alive">Alive</option>
+                            <option value="dead" data-i18n="admin.filter_dead">Dead</option>
+                            <option value="untested">Untested</option>
                         </select>
+                        <input type="text" class="form-input" id="filterSearch" placeholder="Search proxy / country / source" style="min-width:220px;">
                         <button class="btn btn-primary btn-sm" onclick="openImportModal()">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
                                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
@@ -1973,10 +1980,12 @@
 
     async function loadProxies() {
         const protocol = document.getElementById('filterProtocol').value;
-        const alive = document.getElementById('filterAlive').value;
+        const status = document.getElementById('filterAlive').value;
+        const search = document.getElementById('filterSearch').value.trim();
         const params = new URLSearchParams({ page: proxyPage, per_page: proxyPerPage });
         if (protocol !== 'all') params.set('protocol', protocol);
-        if (alive !== '') params.set('alive', alive);
+        if (status !== '') params.set('status', status);
+        if (search !== '') params.set('search', search);
 
         const tbody = document.getElementById('proxyTableBody');
         tbody.innerHTML = '<tr><td colspan="11"><div class="loading-overlay"><span class="spinner"></span> Loading...</div></td></tr>';
@@ -1998,7 +2007,7 @@
                     <td class="mono">${escHtml(p.proxy)}</td>
                     <td><span class="badge badge-protocol">${escHtml(p.protocol.toUpperCase())}</span></td>
                     <td>${escHtml(p.country)}</td>
-                    <td><span class="badge ${p.is_alive ? 'badge-alive' : 'badge-dead'}">${p.is_alive ? 'ALIVE' : 'DEAD'}</span></td>
+                    <td>${renderProxyStatus(p)}</td>
                     <td class="${scoreClass(p.score)}" style="font-weight:600;">${p.score.toFixed(1)}</td>
                     <td class="mono">${p.latency_ms > 0 ? p.latency_ms.toFixed(0) + 'ms' : '—'}</td>
                     <td><span style="color:var(--accent-green)">${p.success_count}</span> / <span style="color:var(--accent-red)">${p.fail_count}</span></td>
@@ -2041,6 +2050,15 @@
         loadProxies();
     }
 
+    function renderProxyStatus(p) {
+        if (!p.last_check_at) {
+            return '<span class="badge badge-unknown">UNTESTED</span>';
+        }
+        return p.is_alive
+            ? '<span class="badge badge-alive">ALIVE</span>'
+            : '<span class="badge badge-dead">DEAD</span>';
+    }
+
     async function deleteProxy(id) {
         if (demoGuard()) return;
         if (!confirm(I18N.t('admin.confirm_delete_proxy'))) return;
@@ -2074,6 +2092,14 @@
     // Filter change listeners
     document.getElementById('filterProtocol').addEventListener('change', () => { proxyPage = 1; loadProxies(); });
     document.getElementById('filterAlive').addEventListener('change', () => { proxyPage = 1; loadProxies(); });
+    let proxySearchTimer = null;
+    document.getElementById('filterSearch').addEventListener('input', () => {
+        clearTimeout(proxySearchTimer);
+        proxySearchTimer = setTimeout(() => {
+            proxyPage = 1;
+            loadProxies();
+        }, 250);
+    });
 
     // ═══════════════════════════════════
     //  Subscription Sources
