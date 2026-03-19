@@ -101,6 +101,7 @@ pub async fn import_proxies_with_hint(
     source: &str,
     protocol_hint: &str,
     subscription_id: Option<i64>,
+    group_name: &str,
 ) -> Result<usize> {
     let mut count = 0;
     for proxy in proxies {
@@ -109,7 +110,14 @@ pub async fn import_proxies_with_hint(
         } else {
             protocol_hint
         };
-        db.upsert_proxy(&proxy.ip, proxy.port, protocol, source, subscription_id)
+        db.upsert_proxy(
+            &proxy.ip,
+            proxy.port,
+            protocol,
+            source,
+            subscription_id,
+            group_name,
+        )
             .await?;
         count += 1;
     }
@@ -172,6 +180,7 @@ pub async fn sync_single_subscription(
         &source_tag,
         &source.protocol_hint,
         Some(source.id),
+        &source.group_name,
     )
     .await?;
     Ok(count)

@@ -357,6 +357,10 @@ impl Database {
                 version: "1.5.0",
                 description: "add checker fail-tier interval settings",
             },
+            DbMigration {
+                version: "1.5.1",
+                description: "backfill proxy-owned groups from subscription defaults",
+            },
         ];
 
         migrations.sort_by(|a, b| {
@@ -388,6 +392,7 @@ impl Database {
                 "1.1.0" => Self::migration_1_1_0(&mut tx).await?,
                 "1.2.0" => Self::migration_1_2_0(&mut tx).await?,
                 "1.5.0" => Self::migration_1_5_0(&mut tx).await?,
+                "1.5.1" => Self::migration_1_5_1(&mut tx).await?,
                 _ => unreachable!("unknown migration version"),
             }
 
@@ -499,6 +504,33 @@ impl Database {
             .execute(&mut **tx)
             .await?;
         }
+
+        Ok(())
+    }
+
+    async fn migration_1_5_1(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Result<()> {
+        // Preserve existing explicit proxy groups; only backfill rows still at default.
+        sqlx::query(
+            r#"
+            UPDATE proxies
+            SET group_name = (
+                SELECT s.group_name
+                FROM subscription_sources s
+                WHERE s.id = proxies.subscription_id
+            ),
+            updated_at = datetime('now')
+            WHERE subscription_id IS NOT NULL
+              AND (group_name IS NULL OR TRIM(group_name) = '' OR group_name = 'default')
+              AND EXISTS (
+                SELECT 1 FROM subscription_sources s
+                WHERE s.id = proxies.subscription_id
+                  AND s.group_name IS NOT NULL
+                  AND TRIM(s.group_name) <> ''
+              )
+            "#,
+        )
+        .execute(&mut **tx)
+        .await?;
 
         Ok(())
     }

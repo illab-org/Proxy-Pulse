@@ -338,7 +338,7 @@ async fn admin_update_proxy_group(
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
                 success: false,
-                error: "proxy is not linked to a subscription source".to_string(),
+                error: "proxy not found".to_string(),
             }),
         )),
         Err(e) => Err((
@@ -365,6 +365,7 @@ async fn admin_import_proxies(
         "admin:import",
         protocol_hint,
         None,
+        "default",
     )
     .await
     {

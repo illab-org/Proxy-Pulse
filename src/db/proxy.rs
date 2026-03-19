@@ -15,14 +15,15 @@ impl Database {
         protocol: &str,
         source: &str,
         subscription_id: Option<i64>,
+        group_name: &str,
     ) -> Result<i64> {
         let now = Utc::now().naive_utc();
         let next_check = now;
 
         let result = sqlx::query(
             r#"
-            INSERT INTO proxies (ip, port, protocol, source, subscription_id, created_at, updated_at, next_check_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO proxies (ip, port, protocol, source, subscription_id, group_name, created_at, updated_at, next_check_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(ip, port, protocol) DO UPDATE SET
                 source = excluded.source,
                 subscription_id = COALESCE(excluded.subscription_id, proxies.subscription_id),
@@ -35,6 +36,7 @@ impl Database {
         .bind(protocol)
         .bind(source)
         .bind(subscription_id)
+        .bind(group_name)
         .bind(now)
         .bind(now)
         .bind(next_check)
@@ -199,9 +201,8 @@ impl Database {
                    p.is_alive, p.success_count, p.fail_count, p.consecutive_fails,
                    p.avg_latency_ms, p.last_check_at, p.last_success_at, p.next_check_at,
                    p.created_at, p.updated_at, p.source, p.subscription_id,
-                   COALESCE(s.group_name, 'default') AS group_name
+                     p.group_name
             FROM proxies p
-            LEFT JOIN subscription_sources s ON s.id = p.subscription_id
             WHERE p.is_alive = 1 AND p.score >= 30
             ORDER BY RANDOM()
             LIMIT 1
@@ -216,7 +217,7 @@ impl Database {
     pub async fn get_top_proxies(&self, limit: i64, group: Option<&str>) -> Result<Vec<Proxy>> {
         let has_group = matches!(group, Some(g) if !g.is_empty() && !g.eq_ignore_ascii_case("all"));
         let group_filter = if has_group {
-            " AND COALESCE(s.group_name, 'default') = ?"
+            " AND p.group_name = ?"
         } else {
             ""
         };
@@ -226,9 +227,8 @@ impl Database {
                  p.is_alive, p.success_count, p.fail_count, p.consecutive_fails,
                  p.avg_latency_ms, p.last_check_at, p.last_success_at, p.next_check_at,
                  p.created_at, p.updated_at, p.source, p.subscription_id,
-                   COALESCE(s.group_name, 'default') as group_name
+                                 p.group_name
             FROM proxies p
-            LEFT JOIN subscription_sources s ON s.id = p.subscription_id
              WHERE p.is_alive = 1{}
              ORDER BY p.score DESC
             LIMIT ?
@@ -260,10 +260,9 @@ impl Database {
                 FROM subscription_sources s
                 WHERE s.group_name IS NOT NULL AND TRIM(s.group_name) <> ''
                 UNION
-                SELECT DISTINCT TRIM(COALESCE(s.group_name, 'default')) AS name
+                SELECT DISTINCT TRIM(p.group_name) AS name
                 FROM proxies p
-                LEFT JOIN subscription_sources s ON s.id = p.subscription_id
-                WHERE TRIM(COALESCE(s.group_name, 'default')) <> ''
+                WHERE p.group_name IS NOT NULL AND TRIM(p.group_name) <> ''
             ) g
             WHERE LOWER(name) <> 'all'
             ORDER BY CASE WHEN name = 'default' THEN 0 ELSE 1 END, name
@@ -295,6 +294,11 @@ impl Database {
         .bind(old_name)
         .execute(&mut *tx)
         .await?;
+        sqlx::query("UPDATE proxies SET group_name = ?, updated_at = datetime('now') WHERE group_name = ?")
+            .bind(new_name)
+            .bind(old_name)
+            .execute(&mut *tx)
+            .await?;
         sqlx::query("DELETE FROM proxy_groups WHERE name = ? AND name <> 'default'")
             .bind(old_name)
             .execute(&mut *tx)
@@ -306,6 +310,10 @@ impl Database {
     pub async fn delete_proxy_group(&self, name: &str) -> Result<()> {
         let mut tx = self.pool.begin().await?;
         sqlx::query("UPDATE subscription_sources SET group_name = 'default', updated_at = datetime('now') WHERE group_name = ?")
+            .bind(name)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE proxies SET group_name = 'default', updated_at = datetime('now') WHERE group_name = ?")
             .bind(name)
             .execute(&mut *tx)
             .await?;
@@ -323,20 +331,11 @@ impl Database {
             .execute(&self.pool)
             .await?;
 
-        let source_id: Option<(i64,)> = sqlx::query_as("SELECT subscription_id FROM proxies WHERE id = ?")
-            .bind(id)
-            .fetch_optional(&self.pool)
-            .await?;
-
-        let Some((subscription_id,)) = source_id else {
-            return Ok(false);
-        };
-
         let result = sqlx::query(
-            "UPDATE subscription_sources SET group_name = ?, updated_at = datetime('now') WHERE id = ?",
+            "UPDATE proxies SET group_name = ?, updated_at = datetime('now') WHERE id = ?",
         )
         .bind(group_name)
-        .bind(subscription_id)
+        .bind(id)
         .execute(&self.pool)
         .await?;
         Ok(result.rows_affected() > 0)
@@ -349,9 +348,8 @@ impl Database {
                    p.is_alive, p.success_count, p.fail_count, p.consecutive_fails,
                    p.avg_latency_ms, p.last_check_at, p.last_success_at, p.next_check_at,
                    p.created_at, p.updated_at, p.source, p.subscription_id,
-                   COALESCE(s.group_name, 'default') AS group_name
+                     p.group_name
             FROM proxies p
-            LEFT JOIN subscription_sources s ON s.id = p.subscription_id
             WHERE p.is_alive = 1 AND LOWER(p.country) = LOWER(?)
             ORDER BY p.score DESC
             LIMIT ?
@@ -373,9 +371,8 @@ impl Database {
                    p.is_alive, p.success_count, p.fail_count, p.consecutive_fails,
                    p.avg_latency_ms, p.last_check_at, p.last_success_at, p.next_check_at,
                    p.created_at, p.updated_at, p.source, p.subscription_id,
-                   COALESCE(s.group_name, 'default') AS group_name
+                     p.group_name
             FROM proxies p
-            LEFT JOIN subscription_sources s ON s.id = p.subscription_id
             ORDER BY p.score DESC
             LIMIT ? OFFSET ?
             "#,
@@ -416,9 +413,8 @@ impl Database {
                    p.is_alive, p.success_count, p.fail_count, p.consecutive_fails,
                    p.avg_latency_ms, p.last_check_at, p.last_success_at, p.next_check_at,
                    p.created_at, p.updated_at, p.source, p.subscription_id,
-                   COALESCE(s.group_name, 'default') AS group_name
+                     p.group_name
             FROM proxies p
-            LEFT JOIN subscription_sources s ON s.id = p.subscription_id
             WHERE p.is_alive = 1{}
             ORDER BY {}{}"#,
             country_filter, order_clause, limit_clause
@@ -544,7 +540,7 @@ impl Database {
         }
         if let Some(group) = filter_group {
             if !group.is_empty() && !group.eq_ignore_ascii_case("all") {
-                where_clauses.push("COALESCE(s.group_name, 'default') = ?".to_string());
+                where_clauses.push("p.group_name = ?".to_string());
             }
         }
         let search_term = search
@@ -564,10 +560,7 @@ impl Database {
             format!("WHERE {}", where_clauses.join(" AND "))
         };
 
-        let count_sql = format!(
-            "SELECT COUNT(*) FROM proxies p LEFT JOIN subscription_sources s ON s.id = p.subscription_id {}",
-            where_sql
-        );
+        let count_sql = format!("SELECT COUNT(*) FROM proxies p {}", where_sql);
         let mut count_query = sqlx::query_as::<_, (i64,)>(&count_sql);
         if let Some(proto) = filter_protocol {
             if !proto.is_empty() && proto != "all" {
@@ -595,9 +588,8 @@ impl Database {
                    p.is_alive, p.success_count, p.fail_count, p.consecutive_fails,
                    p.avg_latency_ms, p.last_check_at, p.last_success_at, p.next_check_at,
                    p.created_at, p.updated_at, p.source, p.subscription_id,
-                                         COALESCE(s.group_name, 'default') as group_name
+                     p.group_name
                         FROM proxies p
-                        LEFT JOIN subscription_sources s ON s.id = p.subscription_id
                         {}
             ORDER BY p.updated_at DESC
             LIMIT ? OFFSET ?
