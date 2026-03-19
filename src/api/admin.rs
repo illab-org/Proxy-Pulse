@@ -223,12 +223,12 @@ async fn admin_create_proxy_group(
 ) -> Result<Json<ApiResponse<bool>>, (StatusCode, Json<ErrorResponse>)> {
     demo_guard(&state)?;
     let name = body.name.trim();
-    if name.is_empty() {
+    if name.is_empty() || name.eq_ignore_ascii_case("all") {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
                 success: false,
-                error: "group name cannot be empty".to_string(),
+                error: "invalid group name".to_string(),
             }),
         ));
     }
@@ -254,7 +254,12 @@ async fn admin_rename_proxy_group(
     demo_guard(&state)?;
     let old_name = body.old_name.trim();
     let new_name = body.new_name.trim();
-    if old_name.is_empty() || new_name.is_empty() || old_name == "default" {
+    if old_name.is_empty()
+        || new_name.is_empty()
+        || old_name.eq_ignore_ascii_case("default")
+        || old_name.eq_ignore_ascii_case("all")
+        || new_name.eq_ignore_ascii_case("all")
+    {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
@@ -284,7 +289,7 @@ async fn admin_delete_proxy_group(
 ) -> Result<Json<ApiResponse<bool>>, (StatusCode, Json<ErrorResponse>)> {
     demo_guard(&state)?;
     let name = body.name.trim();
-    if name.is_empty() || name == "default" {
+    if name.is_empty() || name.eq_ignore_ascii_case("default") || name.eq_ignore_ascii_case("all") {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
@@ -315,20 +320,27 @@ async fn admin_update_proxy_group(
 ) -> Result<Json<ApiResponse<bool>>, (StatusCode, Json<ErrorResponse>)> {
     demo_guard(&state)?;
     let group = body.group.trim();
-    if group.is_empty() {
+    if group.is_empty() || group.eq_ignore_ascii_case("all") {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
                 success: false,
-                error: "group cannot be empty".to_string(),
+                error: "invalid group name".to_string(),
             }),
         ));
     }
     match state.db.update_proxy_group(id, group).await {
-        Ok(updated) => Ok(Json(ApiResponse {
+        Ok(updated) if updated => Ok(Json(ApiResponse {
             success: true,
-            data: updated,
+            data: true,
         })),
+        Ok(_) => Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                success: false,
+                error: "proxy is not linked to a subscription source".to_string(),
+            }),
+        )),
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
@@ -549,12 +561,12 @@ async fn admin_update_source_group(
 ) -> Result<Json<ApiResponse<bool>>, (StatusCode, Json<ErrorResponse>)> {
     demo_guard(&state)?;
     let group = body.group.trim();
-    if group.is_empty() {
+    if group.is_empty() || group.eq_ignore_ascii_case("all") {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
                 success: false,
-                error: "group cannot be empty".to_string(),
+                error: "invalid group name".to_string(),
             }),
         ));
     }

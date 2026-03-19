@@ -252,6 +252,10 @@ impl Database {
             SELECT name FROM (
                 SELECT 'default' AS name
                 UNION
+                SELECT DISTINCT TRIM(name) AS name
+                FROM proxy_groups
+                WHERE name IS NOT NULL AND TRIM(name) <> ''
+                UNION
                 SELECT DISTINCT TRIM(s.group_name) AS name
                 FROM subscription_sources s
                 WHERE s.group_name IS NOT NULL AND TRIM(s.group_name) <> ''
