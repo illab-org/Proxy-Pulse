@@ -1750,17 +1750,17 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;color:var(--accent-cyan);">
                         <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>
                     </svg>
-                    <span>Proxy Group Management</span>
+                    <span data-i18n="admin.proxy_group_management">Proxy Group Management</span>
                 </div>
                 <button class="modal-close" onclick="closeModal('groupManagerModal')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
             </div>
             <div class="form-group">
-                <label class="form-label">Create Group</label>
+                <label class="form-label" data-i18n="admin.create_group">Create Group</label>
                 <div style="display:flex;gap:8px;">
-                    <input type="text" class="form-input" id="newGroupName" placeholder="e.g. premium">
-                    <button class="btn btn-primary" type="button" onclick="createGroup()">Create</button>
+                    <input type="text" class="form-input" id="newGroupName" data-i18n-placeholder="admin.group_name_placeholder" placeholder="e.g. premium">
+                    <button class="btn btn-primary" type="button" onclick="createGroup()" data-i18n="admin.create_group">Create</button>
                 </div>
             </div>
             <div id="groupListContainer"></div>
@@ -2192,7 +2192,14 @@
         const resp = await authFetch(`${API}/proxy/groups`);
         const json = await resp.json();
         if (!json.success) throw new Error(json.error || 'failed to load groups');
-        proxyGroups = Array.from(new Set(['default', ...(json.data || [])]));
+        const groupsFromApi = Array.isArray(json.data) ? json.data : [];
+        proxyGroups = Array.from(
+            new Set(
+                ['default', ...groupsFromApi]
+                    .map(g => (g || '').trim())
+                    .filter(g => g && g.toLowerCase() !== 'all')
+            )
+        );
 
         const filterSel = document.getElementById('filterGroup');
         if (filterSel) {
@@ -2230,18 +2237,27 @@
         if (demoGuard()) return;
         const input = document.getElementById('newGroupName');
         const name = input.value.trim();
-        if (!name) return;
-        const resp = await authFetch(`${API}/proxy/groups/create`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name }),
-        });
-        const json = await resp.json();
-        if (!json.success) return showToast('Failed: ' + json.error, 'error');
-        input.value = '';
-        await loadProxyGroups();
-        renderGroupList();
-        loadProxies();
+        if (!name || name.toLowerCase() === 'all') {
+            showToast(I18N.t('admin.group_invalid_name') || 'Invalid group name', 'error');
+            return;
+        }
+        try {
+            const resp = await authFetch(`${API}/proxy/groups/create`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name }),
+            });
+            const json = await resp.json();
+            if (!json.success) return showToast('Failed: ' + json.error, 'error');
+            input.value = '';
+            await loadProxyGroups();
+            renderGroupList();
+            loadProxies();
+            loadSources();
+            showToast(I18N.t('admin.group_created') || 'Group created', 'success');
+        } catch (e) {
+            showToast('Error: ' + e.message, 'error');
+        }
     }
 
     async function renameGroup(oldName) {
@@ -2250,32 +2266,47 @@
             .find(el => el.dataset.oldGroup === oldName);
         if (!input) return;
         const newName = input.value.trim();
-        if (!newName || newName === oldName) return;
-        const resp = await authFetch(`${API}/proxy/groups/rename`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ old_name: oldName, new_name: newName }),
-        });
-        const json = await resp.json();
-        if (!json.success) return showToast('Failed: ' + json.error, 'error');
-        await loadProxyGroups();
-        renderGroupList();
-        loadProxies();
+        if (!newName || newName === oldName || newName.toLowerCase() === 'all') {
+            showToast(I18N.t('admin.group_invalid_name') || 'Invalid group name', 'error');
+            return;
+        }
+        try {
+            const resp = await authFetch(`${API}/proxy/groups/rename`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ old_name: oldName, new_name: newName }),
+            });
+            const json = await resp.json();
+            if (!json.success) return showToast('Failed: ' + json.error, 'error');
+            await loadProxyGroups();
+            renderGroupList();
+            loadProxies();
+            loadSources();
+            showToast(I18N.t('admin.group_renamed') || 'Group renamed', 'success');
+        } catch (e) {
+            showToast('Error: ' + e.message, 'error');
+        }
     }
 
     async function deleteGroup(name) {
         if (demoGuard()) return;
         if (!confirm(`Delete group "${name}"? Proxies will move to default.`)) return;
-        const resp = await authFetch(`${API}/proxy/groups/delete`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name }),
-        });
-        const json = await resp.json();
-        if (!json.success) return showToast('Failed: ' + json.error, 'error');
-        await loadProxyGroups();
-        renderGroupList();
-        loadProxies();
+        try {
+            const resp = await authFetch(`${API}/proxy/groups/delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name }),
+            });
+            const json = await resp.json();
+            if (!json.success) return showToast('Failed: ' + json.error, 'error');
+            await loadProxyGroups();
+            renderGroupList();
+            loadProxies();
+            loadSources();
+            showToast(I18N.t('admin.group_deleted') || 'Group deleted', 'success');
+        } catch (e) {
+            showToast('Error: ' + e.message, 'error');
+        }
     }
 
     async function openEditProxyModal(id, proxy, protocol, source, group) {
@@ -2302,8 +2333,10 @@
         const json = await resp.json();
         if (!json.success) return showToast('Failed: ' + json.error, 'error');
         closeModal('editProxyModal');
-        showToast('Proxy group updated', 'success');
+        await loadProxyGroups();
+        showToast(I18N.t('admin.proxy_group_updated') || 'Proxy group updated', 'success');
         loadProxies();
+        loadSources();
     }
 
     async function deleteProxy(id) {
@@ -2508,7 +2541,8 @@
             });
             const json = await resp.json();
             if (json.success) {
-                showToast('Source group updated', 'success');
+                await loadProxyGroups();
+                showToast(I18N.t('admin.source_group_updated') || 'Source group updated', 'success');
                 loadSources();
                 loadProxies();
             } else {
